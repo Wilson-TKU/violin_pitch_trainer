@@ -30,7 +30,6 @@ class _ViolinAppState extends State<ViolinApp> {
   bool _isAnswerVisible = false;
 
   // --- 設定變數 ---
-  // [修正] 預設為 442Hz (你可以隨時改為 440.0)
   double _referencePitch = 442.0;
   Set<MusicalKey> _selectedKeys = {MusicalKey.D_Major};
   bool _isMultiSelectMode = false;
@@ -47,16 +46,13 @@ class _ViolinAppState extends State<ViolinApp> {
     _nextNote();
   }
 
-  // 出題邏輯
   Future<void> _nextNote() async {
     await _player.stop();
     if (_selectedKeys.isEmpty) return;
 
-    // 1. 從選取的調性中隨機抽一個
     List<MusicalKey> availableKeys = _selectedKeys.toList();
     _currentQuestionKey = availableKeys[_rng.nextInt(availableKeys.length)];
 
-    // 2. 根據該調性過濾題目
     Set<String> validBaseNames = keyNotesMap[_currentQuestionKey] ?? {};
     List<ViolinNote> validNotes = allNotes.where((note) {
       if (_currentQuestionKey == MusicalKey.F_Sharp_Major &&
@@ -74,7 +70,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
     if (validNotes.isEmpty) return;
 
-    // 3. 根據滑桿範圍過濾
     int totalCount = validNotes.length;
     int startIndex = (_rangePercent.start * (totalCount - 1)).round();
     int endIndex = (_rangePercent.end * (totalCount - 1)).round();
@@ -89,10 +84,7 @@ class _ViolinAppState extends State<ViolinApp> {
       _isAnswerVisible = false;
     });
 
-    // 4. [修正] 播放聲音時，應用基準音計算 (440 vs 442)
-    // 公式: 目標頻率 = 標準頻率 * (設定基準 / 440)
     double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
-
     final Uint8List wavBytes = ToneGenerator.generateSineWave(
       frequency: adjustedFrequency,
       durationMs: 1500,
@@ -364,24 +356,22 @@ class _ViolinAppState extends State<ViolinApp> {
 
                   const SizedBox(height: 10),
 
-                  // 4. [修正] 基準音選擇 (加回來了!)
                   const Text(
-                    "基準音 (Reference Pitch):",
+                    "基準音:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   SegmentedButton<double>(
                     segments: const [
-                      ButtonSegment(value: 440.0, label: Text("440 Hz")),
-                      ButtonSegment(value: 442.0, label: Text("442 Hz")),
+                      ButtonSegment(value: 440.0, label: Text("440")),
+                      ButtonSegment(value: 442.0, label: Text("442")),
                     ],
                     selected: {_referencePitch},
                     onSelectionChanged: (newVal) {
                       setModalState(() => _referencePitch = newVal.first);
-                      // 注意：這裡只更新變數，不會馬上重播，下一題生效
                       setState(() {});
                     },
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 10),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -507,19 +497,12 @@ class _ViolinAppState extends State<ViolinApp> {
         break;
     }
 
-    String labelText;
-    if (_currentQuestionKey.accidentals == 0) {
-      labelText = "C Major";
-    } else {
-      String sign = _currentQuestionKey.accidentals > 0 ? "#" : "b";
-      labelText =
-          "${_currentQuestionKey.label} (${_currentQuestionKey.accidentals.abs()}$sign)";
-    }
+    // 移除了這裡原本計算 labelText 的邏輯
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(_getModeName(_practiceMode)),
+        title: const Text("Violin Trainer"),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -529,23 +512,11 @@ class _ViolinAppState extends State<ViolinApp> {
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            color: Colors.blue[50],
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            alignment: Alignment.center,
-            child: Text(
-              "目前調性: $labelText (${_currentPosition.label})",
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueGrey,
-              ),
-            ),
-          ),
+          // [已移除] 頂部藍色資訊列 (labelText)
 
+          // 1. 五線譜區域 (Flex 28)
           Expanded(
-            flex: 35,
+            flex: 28,
             child: Container(
               width: double.infinity,
               color: Colors.white,
@@ -572,17 +543,19 @@ class _ViolinAppState extends State<ViolinApp> {
 
           const Divider(height: 1, thickness: 1),
 
+          // 2. 下半部區域 (Flex 72)
           Expanded(
-            flex: 65,
+            flex: 72,
             child: Row(
               children: [
+                // 左下：指板
                 Expanded(
                   flex: 6,
                   child: Container(
                     color: const Color(0xFF222222),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 10,
+                      horizontal: 5,
+                      vertical: 5,
                     ),
                     child: Stack(
                       alignment: Alignment.center,
@@ -618,6 +591,7 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                 ),
 
+                // 右下：資訊面板
                 Expanded(
                   flex: 4,
                   child: Container(
@@ -631,6 +605,15 @@ class _ViolinAppState extends State<ViolinApp> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        Text(
+                          _getModeName(_practiceMode),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
                         if (_isAnswerVisible) ...[
                           Text(
                             _currentNote
@@ -658,7 +641,7 @@ class _ViolinAppState extends State<ViolinApp> {
 
                         const Spacer(),
 
-                        ElevatedButton(
+                        IconButton(
                           onPressed: () async {
                             if (_currentNote != null) {
                               double adjFreq =
@@ -673,9 +656,12 @@ class _ViolinAppState extends State<ViolinApp> {
                               await _player.play(BytesSource(wavBytes));
                             }
                           },
-                          child: const Icon(Icons.volume_up),
+                          icon: const Icon(Icons.volume_up, size: 32),
+                          color: Colors.grey[700],
                         ),
-                        const SizedBox(height: 20),
+
+                        const Spacer(),
+
                         SizedBox(
                           width: double.infinity,
                           height: 60,

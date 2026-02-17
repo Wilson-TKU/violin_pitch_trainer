@@ -69,6 +69,7 @@ final List<ViolinNote> allNotes = [
     frequency: 277.18,
     staffIndex: -2,
   ),
+
   // D String
   const ViolinNote(
     baseName: 'D',
@@ -119,6 +120,7 @@ final List<ViolinNote> allNotes = [
     frequency: 415.30,
     staffIndex: 2,
   ),
+
   // A String
   const ViolinNote(
     baseName: 'A',
@@ -169,6 +171,7 @@ final List<ViolinNote> allNotes = [
     frequency: 622.25,
     staffIndex: 6,
   ),
+
   // E String
   const ViolinNote(
     baseName: 'E',
@@ -239,5 +242,27 @@ final List<ViolinNote> allNotes = [
     solfege: 'Do#',
     frequency: 1108.73,
     staffIndex: 12,
+  ),
+  // [NEW] 新增高音域 (Third Position Extension)
+  const ViolinNote(
+    baseName: 'D',
+    octave: 6,
+    solfege: 'Re',
+    frequency: 1174.66,
+    staffIndex: 13,
+  ),
+  const ViolinNote(
+    baseName: 'D#',
+    octave: 6,
+    solfege: 'Re#',
+    frequency: 1244.51,
+    staffIndex: 13,
+  ),
+  const ViolinNote(
+    baseName: 'E',
+    octave: 6,
+    solfege: 'Mi',
+    frequency: 1318.51,
+    staffIndex: 14,
   ),
 ];

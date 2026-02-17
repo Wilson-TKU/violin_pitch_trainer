@@ -206,8 +206,9 @@ class ViolinFingerboardPainter extends CustomPainter {
     double stringSpacing = topWidth / 4;
     double firstStringX = startX + (topWidth - stringSpacing * 3) / 2;
 
-    // 調整比例：顯示 150mm 長度
-    double pixelPerMm = (size.height - nutY) / 150.0;
+    // 調整比例：顯示 160mm 長度，適應第三把位
+    double visibleLengthMm = 160.0;
+    double pixelPerMm = (size.height - nutY) / visibleLengthMm;
 
     // 從 Logic 取得要掃描的半音範圍
     var range = ViolinLogic.getScanRange(currentPosition);
@@ -251,7 +252,6 @@ class ViolinFingerboardPainter extends CustomPainter {
 
       // 根據把位範圍進行掃描
       for (int s = range.start; s <= range.end; s++) {
-        // 這裡需要 pow 來計算背景圖的頻率，所以需要 dart:math
         double posFreq = ViolinLogic.openFreqs[stringIdx] * pow(2, s / 12.0);
         var result = ViolinLogic.analyzeFrequency(
           posFreq,
@@ -261,6 +261,9 @@ class ViolinFingerboardPainter extends CustomPainter {
 
         double mm = ViolinLogic.calculatePositionMm(s);
         double y = nutY + (mm * pixelPerMm);
+
+        // 安全檢查，避免畫出邊界
+        if (y > size.height - 5) continue;
 
         // 畫背景圖鑑
         if (result.isInKey) {
