@@ -3,7 +3,9 @@
 這是一個輔助小提琴音準練習的 Android 與 Web 應用程式，結合「物理指板視覺化」、「五線譜視譜」與「聽覺反饋」機制。
 
 - [🎻 Violin Trainer (小提琴視譜與音高練習器)](#-violin-trainer-小提琴視譜與音高練習器)
-  - [📋 開發環境需求 (Prerequisites)](#-開發環境需求-prerequisites)
+  - [📋 開發與測試環境](#-開發與測試環境)
+    - [開發工具版本](#開發工具版本)
+    - [測試裝置](#測試裝置)
   - [🛠️ 環境架設 (Environment Setup)](#️-環境架設-environment-setup)
     - [1. Flutter SDK 設定](#1-flutter-sdk-設定)
     - [2. Android SDK \& Toolchain](#2-android-sdk--toolchain)
@@ -21,18 +23,31 @@
   - [🐛 常見問題排除 (Troubleshooting)](#-常見問題排除-troubleshooting)
 
 
-## 📋 開發環境需求 (Prerequisites)
+## 📋 開發與測試環境
 
+### 開發工具版本
+* **作業系統**: Windows 10 (開啟開發人員模式)
+* **Flutter SDK**: 3.41.1 (或是目前使用的 `flutter --version`)
+* **Dart SDK**: 3.11.0 (隨 Flutter 安裝)
+* **Android SDK**: API 34.0.0
+* **IDE**: Visual Studio Code (已安裝 Flutter/Dart 擴充套件)
+* **Browser**: Google Chrome 版本 145.0.7632.76 (正式版本) (64 位元)
+
+### 測試裝置
+* **Android 手機**: Samsung Galaxy S22 (開啟開發人員模式)
+* **系統版本**: Android 16 / One UI 8.0
+
+
+
+---
+
+## 🛠️ 環境架設 (Environment Setup)
 在開始之前，請確保你的 Windows 環境已安裝以下工具鏈：
 
 1. **Git**: 用於版本控制。
 2. **VS Code**: 推薦 IDE，請安裝 `Flutter` 與 `Dart` 擴充套件。
 3. **Flutter SDK**: [下載 Stable 版本]()。
 4. **Android Studio**: 用於管理 Android SDK 與 Build Tools。
-
----
-
-## 🛠️ 環境架設 (Environment Setup)
 
 ### 1. Flutter SDK 設定
 
@@ -84,7 +99,7 @@ flutter.sdk=D:\\flutter
 | 目標裝置 | 模式 | 指令 | 說明 |
 | --- | --- | --- | --- |
 | **Android 手機** | **Debug** | `flutter run` | 支援 Hot Reload，效能較普通。 |
-| **Android 手機** | **Release** | `flutter run --release` | **移除右上角 Debug 字樣**，效 |
+| **Android 手機** | **Release** | `flutter run --release` | **移除右上角 Debug 字樣**，效能較好。 |
 | **Chrome** | **Debug** | `flutter run -d chrome` | 快速驗證 UI 佈局。 |
 
 ---
