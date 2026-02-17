@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-// 引入拆分後的模組
+// 引入模組
 import 'models/note.dart';
 import 'models/scale_data.dart';
 import 'utils/audio_gen.dart';
@@ -504,110 +504,113 @@ class _ViolinAppState extends State<ViolinApp> {
           ),
         ],
       ),
-      body: Column(
+      body: Row(
+        // [改版] 主要佈局變成 Row (水平排列)
         children: [
-          // 1. 五線譜區域 (增加比例至 32% 以容納更多音)
+          // ------------------------------------------
+          // 左側: 指板區域 (滿版高度)
+          // ------------------------------------------
           Expanded(
-            flex: 32,
+            flex: 35, // 左側佔 35% 寬度
             child: Container(
-              width: double.infinity,
-              color: Colors.white,
-              // 使用 Padding 確保上下有緩衝
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              color: const Color(0xFF222222),
+              padding: const EdgeInsets.symmetric(vertical: 20), // 上下留白
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   CustomPaint(
                     size: Size.infinite,
-                    painter: StaffPainter(
-                      noteIndex: showStaff ? _currentNote?.staffIndex : null,
-                      keySignature: _currentQuestionKey,
+                    painter: ViolinFingerboardPainter(
+                      targetNote: showFingerboardAnswer ? _currentNote : null,
+                      currentKey: _currentQuestionKey,
+                      currentPosition: _currentPosition,
                     ),
                   ),
-                  if (!showStaff)
-                    const Icon(
-                      Icons.visibility_off,
-                      size: 50,
-                      color: Colors.grey,
+                  // 指板上的遮罩提示
+                  if (_practiceMode == PracticeMode.staffToFinger &&
+                      !_isAnswerVisible)
+                    const Center(
+                      child: Text(
+                        "?",
+                        style: TextStyle(fontSize: 80, color: Colors.white24),
+                      ),
+                    ),
+                  if (_practiceMode == PracticeMode.earTraining &&
+                      !_isAnswerVisible)
+                    const Center(
+                      child: Icon(
+                        Icons.visibility_off,
+                        size: 60,
+                        color: Colors.white24,
+                      ),
                     ),
                 ],
               ),
             ),
           ),
 
-          const Divider(height: 1, thickness: 1),
+          // 分隔線
+          const VerticalDivider(width: 1, thickness: 1),
 
-          // 2. 下半部區域 (68%)
+          // ------------------------------------------
+          // 右側: 資訊與五線譜區域
+          // ------------------------------------------
           Expanded(
-            flex: 68,
-            child: Row(
+            flex: 65, // 右側佔 65% 寬度
+            child: Column(
               children: [
-                // 左下：指板
+                // 1. 五線譜 (Top)
                 Expanded(
-                  flex: 6,
+                  flex: 4, // 右側垂直佔比 40%
                   child: Container(
-                    color: const Color(0xFF222222),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 5,
-                    ),
+                    width: double.infinity,
+                    color: Colors.white,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         CustomPaint(
                           size: Size.infinite,
-                          painter: ViolinFingerboardPainter(
-                            targetNote: showFingerboardAnswer
-                                ? _currentNote
+                          painter: StaffPainter(
+                            noteIndex: showStaff
+                                ? _currentNote?.staffIndex
                                 : null,
-                            currentKey: _currentQuestionKey,
-                            currentPosition: _currentPosition,
+                            keySignature: _currentQuestionKey,
                           ),
                         ),
-                        if (_practiceMode == PracticeMode.staffToFinger &&
-                            !_isAnswerVisible)
-                          const Text(
-                            "?",
-                            style: TextStyle(
-                              fontSize: 80,
-                              color: Colors.white24,
-                            ),
-                          ),
-                        if (_practiceMode == PracticeMode.earTraining &&
-                            !_isAnswerVisible)
+                        if (!showStaff)
                           const Icon(
                             Icons.visibility_off,
-                            size: 60,
-                            color: Colors.white24,
+                            size: 50,
+                            color: Colors.grey,
                           ),
                       ],
                     ),
                   ),
                 ),
 
-                // 右下：資訊面板
+                const Divider(height: 1, thickness: 1),
+
+                // 2. 操作與資訊 (Bottom)
                 Expanded(
-                  flex: 4,
+                  flex: 6, // 右側垂直佔比 60%
                   child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      border: const Border(
-                        left: BorderSide(color: Colors.grey),
-                      ),
-                    ),
+                    color: Colors.grey[50],
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // 顯示模式與調性
                         Text(
-                          _getModeName(_practiceMode),
+                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label}",
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 16,
                             color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 20),
 
+                        // 答案顯示
                         if (_isAnswerVisible) ...[
                           Text(
                             _currentNote
@@ -615,7 +618,7 @@ class _ViolinAppState extends State<ViolinApp> {
                                     .split('\n')[0] ??
                                 "",
                             style: const TextStyle(
-                              fontSize: 42,
+                              fontSize: 60,
                               fontWeight: FontWeight.bold,
                               color: Colors.blue,
                             ),
@@ -623,18 +626,19 @@ class _ViolinAppState extends State<ViolinApp> {
                           Text(
                             _currentNote?.solfege ?? "",
                             style: const TextStyle(
-                              fontSize: 26,
+                              fontSize: 30,
                               color: Colors.black54,
                             ),
                           ),
                         ] else
                           const Text(
                             "?",
-                            style: TextStyle(fontSize: 60, color: Colors.grey),
+                            style: TextStyle(fontSize: 80, color: Colors.grey),
                           ),
 
                         const Spacer(),
 
+                        // 重聽按鈕
                         IconButton(
                           onPressed: () async {
                             if (_currentNote != null) {
@@ -650,15 +654,16 @@ class _ViolinAppState extends State<ViolinApp> {
                               await _player.play(BytesSource(wavBytes));
                             }
                           },
-                          icon: const Icon(Icons.volume_up, size: 32),
+                          icon: const Icon(Icons.volume_up, size: 40),
                           color: Colors.grey[700],
                         ),
 
-                        const Spacer(),
+                        const SizedBox(height: 20),
 
+                        // Answer 按鈕
                         SizedBox(
                           width: double.infinity,
-                          height: 60,
+                          height: 70,
                           child: ElevatedButton(
                             onPressed: () {
                               if (_isAnswerVisible) {
@@ -672,13 +677,20 @@ class _ViolinAppState extends State<ViolinApp> {
                                   ? Colors.blue
                                   : Colors.orange,
                               foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
                             child: Text(
                               _isAnswerVisible ? "Next" : "Answer",
-                              style: const TextStyle(fontSize: 20),
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
