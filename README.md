@@ -1,7 +1,3 @@
-# 🎻 Violin Trainer (小提琴視譜與音高練習器)
-
-這是一個輔助小提琴音準練習的 Android 與 Web 應用程式，結合「物理指板視覺化」、「五線譜視譜」與「聽覺反饋」機制。
-
 - [🎻 Violin Trainer (小提琴視譜與音高練習器)](#-violin-trainer-小提琴視譜與音高練習器)
   - [📋 開發與測試環境](#-開發與測試環境)
     - [開發工具版本](#開發工具版本)
@@ -21,7 +17,13 @@
     - [智慧邏輯系統](#智慧邏輯系統)
   - [🛠️ 專案架構 (Refactored)](#️-專案架構-refactored)
   - [🐛 常見問題排除 (Troubleshooting)](#-常見問題排除-troubleshooting)
+# 🎻 Violin Trainer (小提琴視譜與音高練習器)
 
+這是一個輔助小提琴音準練習的 Android 與 Web 應用程式，結合「物理指板視覺化」、「五線譜視譜」與「聽覺反饋」機制。
+
+
+![alt text](doc/1.png)
+![alt text](doc/2.png)
 
 ## 📋 開發與測試環境
 
