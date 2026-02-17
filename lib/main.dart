@@ -4,11 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-// 引入模組
 import 'models/note.dart';
 import 'models/scale_data.dart';
 import 'utils/audio_gen.dart';
 import 'widgets/painters.dart';
+import 'utils/violin_logic.dart';
 
 void main() {
   runApp(const MaterialApp(home: ViolinApp()));
@@ -35,26 +35,64 @@ class _ViolinAppState extends State<ViolinApp> {
   bool _isMultiSelectMode = false;
 
   MusicalKey _currentQuestionKey = MusicalKey.D_Major;
-  ViolinPosition _currentPosition = ViolinPosition.first;
+
+  Set<ViolinPosition> _selectedPositions = {ViolinPosition.first};
+  bool _isPositionMultiSelectMode = false;
+  ViolinPosition _targetPosition = ViolinPosition.first;
 
   PracticeMode _practiceMode = PracticeMode.staffToFinger;
+
+  // 預設範圍 (稍後會在 initState 自動調整)
   RangeValues _rangePercent = const RangeValues(0.0, 1.0);
 
   @override
   void initState() {
     super.initState();
+    // [NEW] 初始化時，自動將音域設定為當前把位的預設範圍
+    _resetRangeToFitPosition();
     _nextNote();
+  }
+
+  // [Helper] 計算當前選取把位的「合法百分比範圍」
+  // 回傳 (minPercent, maxPercent)
+  ({double min, double max}) _getValidRangeForPositions() {
+    if (_selectedPositions.isEmpty) return (min: 0.0, max: 1.0);
+
+    int totalNotes = ViolinLogic.totalNotesCount;
+    int globalMinIndex = totalNotes;
+    int globalMaxIndex = -1;
+
+    for (var pos in _selectedPositions) {
+      var range = ViolinLogic.getPositionIndexRange(pos);
+      if (range.minIndex < globalMinIndex) globalMinIndex = range.minIndex;
+      if (range.maxIndex > globalMaxIndex) globalMaxIndex = range.maxIndex;
+    }
+
+    double minP = globalMinIndex / (totalNotes - 1);
+    double maxP = globalMaxIndex / (totalNotes - 1);
+
+    // 確保數值在 0~1 之間
+    return (min: minP.clamp(0.0, 1.0), max: maxP.clamp(0.0, 1.0));
+  }
+
+  // [NEW] 強制將滑桿重置為該把位的最大範圍 (用於切換把位時)
+  void _resetRangeToFitPosition() {
+    var validRange = _getValidRangeForPositions();
+    setState(() {
+      _rangePercent = RangeValues(validRange.min, validRange.max);
+    });
   }
 
   Future<void> _nextNote() async {
     await _player.stop();
-    if (_selectedKeys.isEmpty) return;
+    if (_selectedKeys.isEmpty || _selectedPositions.isEmpty) return;
 
     List<MusicalKey> availableKeys = _selectedKeys.toList();
     _currentQuestionKey = availableKeys[_rng.nextInt(availableKeys.length)];
 
     Set<String> validBaseNames = keyNotesMap[_currentQuestionKey] ?? {};
-    List<ViolinNote> validNotes = allNotes.where((note) {
+
+    List<ViolinNote> keyValidNotes = allNotes.where((note) {
       if (_currentQuestionKey == MusicalKey.F_Sharp_Major &&
           note.baseName == 'F')
         return true;
@@ -64,22 +102,45 @@ class _ViolinAppState extends State<ViolinApp> {
       if (_currentQuestionKey == MusicalKey.Cb_Major &&
           (note.baseName == 'B' || note.baseName == 'E'))
         return true;
-
       return validBaseNames.contains(note.baseName);
     }).toList();
 
-    if (validNotes.isEmpty) return;
+    List<ViolinNote> positionValidNotes = keyValidNotes.where((note) {
+      for (var pos in _selectedPositions) {
+        if (ViolinLogic.isNoteInPosition(note, pos)) return true;
+      }
+      return false;
+    }).toList();
 
-    int totalCount = validNotes.length;
-    int startIndex = (_rangePercent.start * (totalCount - 1)).round();
-    int endIndex = (_rangePercent.end * (totalCount - 1)).round();
-    if (endIndex < startIndex) endIndex = startIndex;
+    if (positionValidNotes.isEmpty) return;
 
-    int randomIndex = startIndex + _rng.nextInt(endIndex - startIndex + 1);
-    final note = validNotes[randomIndex];
+    // 根據滑桿範圍過濾
+    int globalTotal = allNotes.length;
+    int minIndex = (_rangePercent.start * (globalTotal - 1)).round();
+    int maxIndex = (_rangePercent.end * (globalTotal - 1)).round();
+
+    List<ViolinNote> rangeFilteredNotes = positionValidNotes.where((note) {
+      int idx = allNotes.indexOf(note);
+      return idx >= minIndex && idx <= maxIndex;
+    }).toList();
+
+    if (rangeFilteredNotes.isEmpty) {
+      rangeFilteredNotes = positionValidNotes;
+    }
+
+    final note = rangeFilteredNotes[_rng.nextInt(rangeFilteredNotes.length)];
+
+    List<ViolinPosition> possiblePositions = _selectedPositions.where((pos) {
+      return ViolinLogic.isNoteInPosition(note, pos);
+    }).toList();
+
+    ViolinPosition chosenPos = possiblePositions.isNotEmpty
+        ? possiblePositions[_rng.nextInt(possiblePositions.length)]
+        : _selectedPositions.first;
 
     setState(() {
       _currentNote = note;
+      _targetPosition = chosenPos;
       _isPlaying = true;
       _isAnswerVisible = false;
     });
@@ -120,7 +181,6 @@ class _ViolinAppState extends State<ViolinApp> {
     }
   }
 
-  // --- 設定面板 ---
   void _showSettings() {
     showModalBottomSheet(
       context: context,
@@ -140,6 +200,9 @@ class _ViolinAppState extends State<ViolinApp> {
                 .getDisplayName(_selectedKeys.first)
                 .replaceAll('\n', ' ');
 
+            // 取得目前的有效範圍限制
+            var validRange = _getValidRangeForPositions();
+
             return Container(
               padding: const EdgeInsets.all(20),
               height: 750,
@@ -152,6 +215,7 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
+                  // 1. 練習模式
                   const Text(
                     "練習模式:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -173,29 +237,7 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  const Text(
-                    "把位 (Position):",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SegmentedButton<ViolinPosition>(
-                    segments: const [
-                      ButtonSegment(
-                        value: ViolinPosition.first,
-                        label: Text("First (第一)"),
-                      ),
-                      ButtonSegment(
-                        value: ViolinPosition.third,
-                        label: Text("Third (第三)"),
-                      ),
-                    ],
-                    selected: {_currentPosition},
-                    onSelectionChanged: (newVal) {
-                      setModalState(() => _currentPosition = newVal.first);
-                      setState(() => _currentPosition = newVal.first);
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
+                  // 2. 調性選擇
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -239,7 +281,6 @@ class _ViolinAppState extends State<ViolinApp> {
                         child: const Text("全選/重置"),
                       ),
                     ),
-
                   const SizedBox(height: 5),
 
                   Expanded(
@@ -352,23 +393,78 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
 
                   const SizedBox(height: 10),
-                  const Text(
-                    "基準音:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SegmentedButton<double>(
-                    segments: const [
-                      ButtonSegment(value: 440.0, label: Text("440")),
-                      ButtonSegment(value: 442.0, label: Text("442")),
+
+                  // 3. 把位選擇 (多選)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "把位 (Position):",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          const Text("多選: "),
+                          Switch(
+                            value: _isPositionMultiSelectMode,
+                            onChanged: (val) {
+                              setModalState(
+                                () => _isPositionMultiSelectMode = val,
+                              );
+                              setState(() => _isPositionMultiSelectMode = val);
+                              // 切換回單選時，只保留第一個
+                              if (!val && _selectedPositions.length > 1) {
+                                setModalState(() {
+                                  _selectedPositions = {
+                                    _selectedPositions.first,
+                                  };
+                                  _resetRangeToFitPosition(); // 自動重置音域
+                                });
+                                setState(() => _nextNote());
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ],
-                    selected: {_referencePitch},
-                    onSelectionChanged: (newVal) {
-                      setModalState(() => _referencePitch = newVal.first);
-                      setState(() {});
+                  ),
+
+                  SegmentedButton<ViolinPosition>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ViolinPosition.first,
+                        label: Text("First (第一)"),
+                      ),
+                      ButtonSegment(
+                        value: ViolinPosition.third,
+                        label: Text("Third (第三)"),
+                      ),
+                    ],
+                    selected: _selectedPositions,
+                    multiSelectionEnabled: _isPositionMultiSelectMode,
+                    onSelectionChanged: (newValues) {
+                      setModalState(() {
+                        if (_isPositionMultiSelectMode) {
+                          if (newValues.isEmpty) return;
+                          _selectedPositions = newValues;
+                        } else {
+                          // 單選邏輯：強制替換
+                          if (newValues.isNotEmpty) {
+                            _selectedPositions = newValues;
+                          }
+                        }
+                        // [NEW] 當把位改變時，自動把音域重置到該把位最大範圍
+                        _resetRangeToFitPosition();
+                      });
+                      setState(() => _nextNote());
                     },
                   ),
                   const SizedBox(height: 10),
 
+                  // 4. 音域範圍
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -392,12 +488,51 @@ class _ViolinAppState extends State<ViolinApp> {
                     values: _rangePercent,
                     min: 0.0,
                     max: 1.0,
-                    divisions: 20,
+                    divisions: 40, // 增加刻度讓調整更細
                     onChanged: (RangeValues values) {
-                      setModalState(() => _rangePercent = values);
+                      // [NEW] 限制拖曳範圍：不能超出當前選定把位的物理限制
+                      double clampedStart = values.start;
+                      double clampedEnd = values.end;
+
+                      // 限制下限
+                      if (clampedStart < validRange.min)
+                        clampedStart = validRange.min;
+                      // 限制上限
+                      if (clampedEnd > validRange.max)
+                        clampedEnd = validRange.max;
+                      // 防止交錯
+                      if (clampedStart > clampedEnd) clampedStart = clampedEnd;
+
+                      setModalState(
+                        () => _rangePercent = RangeValues(
+                          clampedStart,
+                          clampedEnd,
+                        ),
+                      );
                       setState(() {});
                     },
                   ),
+
+                  const SizedBox(height: 10),
+
+                  // 5. 基準音
+                  const Text(
+                    "基準音:",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SegmentedButton<double>(
+                    segments: const [
+                      ButtonSegment(value: 440.0, label: Text("440")),
+                      ButtonSegment(value: 442.0, label: Text("442")),
+                    ],
+                    selected: {_referencePitch},
+                    onSelectionChanged: (newVal) {
+                      setModalState(() => _referencePitch = newVal.first);
+                      setState(() {});
+                    },
+                  ),
+
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -416,7 +551,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
   Widget _buildKeyButton(MusicalKey key, StateSetter setModalState) {
     bool isSelected = _selectedKeys.contains(key);
-
     return GestureDetector(
       onTap: () {
         setModalState(() {
@@ -505,16 +639,13 @@ class _ViolinAppState extends State<ViolinApp> {
         ],
       ),
       body: Row(
-        // [改版] 主要佈局變成 Row (水平排列)
         children: [
-          // ------------------------------------------
-          // 左側: 指板區域 (滿版高度)
-          // ------------------------------------------
+          // 左側: 指板
           Expanded(
-            flex: 35, // 左側佔 35% 寬度
+            flex: 35,
             child: Container(
               color: const Color(0xFF222222),
-              padding: const EdgeInsets.symmetric(vertical: 20), // 上下留白
+              padding: const EdgeInsets.symmetric(vertical: 20),
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -523,10 +654,9 @@ class _ViolinAppState extends State<ViolinApp> {
                     painter: ViolinFingerboardPainter(
                       targetNote: showFingerboardAnswer ? _currentNote : null,
                       currentKey: _currentQuestionKey,
-                      currentPosition: _currentPosition,
+                      currentPosition: _targetPosition,
                     ),
                   ),
-                  // 指板上的遮罩提示
                   if (_practiceMode == PracticeMode.staffToFinger &&
                       !_isAnswerVisible)
                     const Center(
@@ -549,19 +679,15 @@ class _ViolinAppState extends State<ViolinApp> {
             ),
           ),
 
-          // 分隔線
           const VerticalDivider(width: 1, thickness: 1),
 
-          // ------------------------------------------
-          // 右側: 資訊與五線譜區域
-          // ------------------------------------------
+          // 右側: 譜與操作
           Expanded(
-            flex: 65, // 右側佔 65% 寬度
+            flex: 65,
             child: Column(
               children: [
-                // 1. 五線譜 (Top)
                 Expanded(
-                  flex: 4, // 右側垂直佔比 40%
+                  flex: 4,
                   child: Container(
                     width: double.infinity,
                     color: Colors.white,
@@ -590,18 +716,16 @@ class _ViolinAppState extends State<ViolinApp> {
 
                 const Divider(height: 1, thickness: 1),
 
-                // 2. 操作與資訊 (Bottom)
                 Expanded(
-                  flex: 6, // 右側垂直佔比 60%
+                  flex: 6,
                   child: Container(
                     color: Colors.grey[50],
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // 顯示模式與調性
                         Text(
-                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label}",
+                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label} (${_targetPosition.label.split(' ')[0]})",
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -610,7 +734,6 @@ class _ViolinAppState extends State<ViolinApp> {
                         ),
                         const SizedBox(height: 20),
 
-                        // 答案顯示
                         if (_isAnswerVisible) ...[
                           Text(
                             _currentNote
@@ -638,7 +761,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
                         const Spacer(),
 
-                        // 重聽按鈕
                         IconButton(
                           onPressed: () async {
                             if (_currentNote != null) {
@@ -660,7 +782,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
                         const SizedBox(height: 20),
 
-                        // Answer 按鈕
                         SizedBox(
                           width: double.infinity,
                           height: 70,

@@ -1,25 +1,19 @@
 import 'dart:math';
 import '../models/note.dart';
-import '../models/scale_data.dart'; // 確保能讀取到 allNotes
+import '../models/scale_data.dart';
 
 class ViolinLogic {
-  static const double openStringLength = 325.0; // 有效弦長 (mm)
-  static const List<double> openFreqs = [
-    196.00,
-    293.66,
-    440.00,
-    659.25,
-  ]; // G, D, A, E
+  static const double openStringLength = 325.0;
+  static const List<double> openFreqs = [196.00, 293.66, 440.00, 659.25];
 
-  /// 計算物理距離 (mm)
+  // [NEW] 方便取得總音符數量
+  static int get totalNotesCount => allNotes.length;
+
   static double calculatePositionMm(int semitonesFromOpen) {
     if (semitonesFromOpen <= 0) return -12.0;
     return openStringLength * (1 - 1 / pow(2, semitonesFromOpen / 12.0));
   }
 
-  /// [NEW] 根據把位，決定要繪製的半音範圍
-  /// 第一把位：畫 0~8 (空弦到小指)
-  /// 第三把位：畫 4~13 (從第一把位的3指位置開始畫)
   static ({int start, int end}) getScanRange(ViolinPosition pos) {
     switch (pos) {
       case ViolinPosition.first:
@@ -29,23 +23,36 @@ class ViolinLogic {
     }
   }
 
-  /// [NEW] 根據把位，計算指法數字 (1, 2, 3, 4)
+  static ({int minIndex, int maxIndex}) getPositionIndexRange(
+    ViolinPosition pos,
+  ) {
+    switch (pos) {
+      case ViolinPosition.first:
+        return (minIndex: 0, maxIndex: 28); // G3 ~ B5
+      case ViolinPosition.third:
+        return (minIndex: 5, maxIndex: 37); // C4 ~ E6
+    }
+  }
+
+  static bool isNoteInPosition(ViolinNote note, ViolinPosition pos) {
+    int index = allNotes.indexOf(note);
+    if (index == -1) return false;
+
+    var range = getPositionIndexRange(pos);
+    return index >= range.minIndex && index <= range.maxIndex;
+  }
+
   static int calcFingerNum(int semitones, ViolinPosition pos) {
-    if (semitones == 0) return 0; // 空弦
+    if (semitones == 0) return 0;
 
     if (pos == ViolinPosition.first) {
-      // --- 第一把位邏輯 ---
-      if (semitones <= 2) return 1; // 1-2半音 -> 1指
-      if (semitones <= 4) return 2; // 3-4半音 -> 2指
-      if (semitones <= 6) return 3; // 5-6半音 -> 3指
-      return 4; // 7-8半音 -> 4指
+      if (semitones <= 2) return 1;
+      if (semitones <= 4) return 2;
+      if (semitones <= 6) return 3;
+      return 4;
     } else {
-      // --- 第三把位邏輯 ---
-      // 基準點上移：原本第5半音的位置變成1指
-      // 公式：相對位置 = 絕對半音 - 4
       int relative = semitones - 4;
-
-      if (relative <= 0) return 1; // 延伸指
+      if (relative <= 0) return 1;
       if (relative <= 2) return 1;
       if (relative <= 4) return 2;
       if (relative <= 6) return 3;
@@ -53,7 +60,6 @@ class ViolinLogic {
     }
   }
 
-  /// 分析頻率對應的音
   static ({ViolinNote? note, bool isInKey, int semitones}) analyzeFrequency(
     double freq,
     int stringIdx,
