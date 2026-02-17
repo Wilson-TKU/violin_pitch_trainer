@@ -152,7 +152,6 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 1. 練習模式
                   const Text(
                     "練習模式:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -174,7 +173,6 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 2. 把位選擇
                   const Text(
                     "把位 (Position):",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -198,7 +196,6 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 3. 調性選擇
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -355,7 +352,6 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
 
                   const SizedBox(height: 10),
-
                   const Text(
                     "基準音:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -497,8 +493,6 @@ class _ViolinAppState extends State<ViolinApp> {
         break;
     }
 
-    // 移除了這裡原本計算 labelText 的邏輯
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -512,14 +506,14 @@ class _ViolinAppState extends State<ViolinApp> {
       ),
       body: Column(
         children: [
-          // [已移除] 頂部藍色資訊列 (labelText)
-
-          // 1. 五線譜區域 (Flex 28)
+          // 1. 五線譜區域 (增加比例至 32% 以容納更多音)
           Expanded(
-            flex: 28,
+            flex: 32,
             child: Container(
               width: double.infinity,
               color: Colors.white,
+              // 使用 Padding 確保上下有緩衝
+              padding: const EdgeInsets.symmetric(vertical: 10),
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -543,9 +537,9 @@ class _ViolinAppState extends State<ViolinApp> {
 
           const Divider(height: 1, thickness: 1),
 
-          // 2. 下半部區域 (Flex 72)
+          // 2. 下半部區域 (68%)
           Expanded(
-            flex: 72,
+            flex: 68,
             child: Row(
               children: [
                 // 左下：指板

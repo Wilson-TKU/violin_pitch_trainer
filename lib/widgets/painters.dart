@@ -1,4 +1,4 @@
-import 'dart:math'; // [修正] 補上這行，才能使用 pow
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../utils/violin_logic.dart';
@@ -60,7 +60,7 @@ class KeySignaturePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- 五線譜繪圖器 ---
+// --- 五線譜繪圖器 (Zoomed Out) ---
 class StaffPainter extends CustomPainter {
   final int? noteIndex;
   final MusicalKey keySignature;
@@ -77,7 +77,9 @@ class StaffPainter extends CustomPainter {
     final Paint notePaint = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.fill;
-    final double spaceHeight = 14.0;
+
+    // [優化] 縮小行距，讓更多音符能顯示出來
+    final double spaceHeight = 10.0; // 原本 14.0
 
     for (int i = 0; i < 5; i++) {
       double y = centerY + (2 - i) * spaceHeight * 2;
@@ -105,16 +107,16 @@ class StaffPainter extends CustomPainter {
       double baseLineY = centerY + 2 * spaceHeight * 2;
       double noteY = baseLineY - (noteIndex! * spaceHeight);
       canvas.drawOval(
-        Rect.fromCenter(center: Offset(centerX, noteY), width: 22, height: 16),
+        Rect.fromCenter(center: Offset(centerX, noteY), width: 18, height: 13),
         notePaint,
-      );
+      ); // 稍微縮小音符
 
       if (noteIndex! < -1) {
         for (int i = -2; i >= noteIndex!; i -= 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 18, lineY),
-            Offset(centerX + 18, lineY),
+            Offset(centerX - 16, lineY),
+            Offset(centerX + 16, lineY),
             linePaint,
           );
         }
@@ -123,8 +125,8 @@ class StaffPainter extends CustomPainter {
         for (int i = 10; i <= noteIndex!; i += 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 18, lineY),
-            Offset(centerX + 18, lineY),
+            Offset(centerX - 16, lineY),
+            Offset(centerX + 16, lineY),
             linePaint,
           );
         }
@@ -150,7 +152,7 @@ class StaffPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- 指板繪圖器 ---
+// --- 指板繪圖器 (Extended View) ---
 class ViolinFingerboardPainter extends CustomPainter {
   final ViolinNote? targetNote;
   final MusicalKey currentKey;
@@ -206,8 +208,8 @@ class ViolinFingerboardPainter extends CustomPainter {
     double stringSpacing = topWidth / 4;
     double firstStringX = startX + (topWidth - stringSpacing * 3) / 2;
 
-    // 調整比例：顯示 160mm 長度，適應第三把位
-    double visibleLengthMm = 160.0;
+    // [優化] 增加 visibleLengthMm 來縮小比例，讓更多把位能顯示
+    double visibleLengthMm = 200.0; // 原本 160.0
     double pixelPerMm = (size.height - nutY) / visibleLengthMm;
 
     // 從 Logic 取得要掃描的半音範圍
@@ -219,7 +221,6 @@ class ViolinFingerboardPainter extends CustomPainter {
       bool isTargetString = false;
       int targetSemitones = -1;
 
-      // 判斷目標音
       if (targetNote != null) {
         var result = ViolinLogic.analyzeFrequency(
           targetNote!.frequency,
@@ -232,14 +233,12 @@ class ViolinFingerboardPainter extends CustomPainter {
         }
       }
 
-      // 畫弦
       canvas.drawLine(
         Offset(x, nutY),
         Offset(x, size.height),
         isTargetString ? highlightStringPaint : stringPaint,
       );
 
-      // 畫弦名
       TextPainter(
           text: TextSpan(
             text: stringNames[stringIdx],
@@ -250,7 +249,6 @@ class ViolinFingerboardPainter extends CustomPainter {
         ..layout()
         ..paint(canvas, Offset(x - 5, 0));
 
-      // 根據把位範圍進行掃描
       for (int s = range.start; s <= range.end; s++) {
         double posFreq = ViolinLogic.openFreqs[stringIdx] * pow(2, s / 12.0);
         var result = ViolinLogic.analyzeFrequency(
@@ -262,10 +260,8 @@ class ViolinFingerboardPainter extends CustomPainter {
         double mm = ViolinLogic.calculatePositionMm(s);
         double y = nutY + (mm * pixelPerMm);
 
-        // 安全檢查，避免畫出邊界
         if (y > size.height - 5) continue;
 
-        // 畫背景圖鑑
         if (result.isInKey) {
           if (s == 0) {
             canvas.drawCircle(
@@ -281,7 +277,6 @@ class ViolinFingerboardPainter extends CustomPainter {
           }
         }
 
-        // 畫目標高亮
         if (isTargetString && s == targetSemitones) {
           int fingerNum = ViolinLogic.calcFingerNum(s, currentPosition);
 
