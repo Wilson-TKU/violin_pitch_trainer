@@ -23,42 +23,40 @@ enum PracticeMode {
 // 完整定義 15 個大調
 enum MusicalKey {
   // --- Naturals ---
-  C_Major("C Major", 0),
+  C_Major("C", 0),
 
   // --- Sharps (1# ~ 7#) ---
-  G_Major("G Major", 1),
-  D_Major("D Major", 2),
-  A_Major("A Major", 3),
-  E_Major("E Major", 4),
-  B_Major("B Major", 5),
-  F_Sharp_Major("F# Major", 6),
-  C_Sharp_Major("C# Major", 7),
+  G_Major("G", 1),
+  D_Major("D", 2),
+  A_Major("A", 3),
+  E_Major("E", 4),
+  B_Major("B", 5),
+  F_Sharp_Major("F#", 6),
+  C_Sharp_Major("C#", 7),
 
   // --- Flats (1b ~ 7b) ---
-  F_Major("F Major", -1),
-  Bb_Major("Bb Major", -2),
-  Eb_Major("Eb Major", -3),
-  Ab_Major("Ab Major", -4),
-  Db_Major("Db Major", -5),
-  Gb_Major("Gb Major", -6),
-  Cb_Major("Cb Major", -7);
+  F_Major("F", -1),
+  Bb_Major("Bb", -2),
+  Eb_Major("Eb", -3),
+  Ab_Major("Ab", -4),
+  Db_Major("Db", -5),
+  Gb_Major("Gb", -6),
+  Cb_Major("Cb", -7);
 
   final String label;
   final int accidentals; // + for sharps, - for flats
   const MusicalKey(this.label, this.accidentals);
 
-  // 取得顯示用的簡寫，例如 "2#" 或 "3b"
+  // 取得顯示用的簡寫
   String get accidentalLabel {
-    if (accidentals == 0) return "♮"; // Natural
+    if (accidentals == 0) return "♮";
     return "${accidentals.abs()}${accidentals > 0 ? '#' : 'b'}";
   }
 }
 
-// 題庫設定：定義每個調性的合法音
+// 題庫設定
 const Map<MusicalKey, Set<String>> keyNotesMap = {
   MusicalKey.C_Major: {'C', 'D', 'E', 'F', 'G', 'A', 'B'},
-
-  // Sharps
   MusicalKey.G_Major: {'G', 'A', 'B', 'C', 'D', 'E', 'F#'},
   MusicalKey.D_Major: {'D', 'E', 'F#', 'G', 'A', 'B', 'C#'},
   MusicalKey.A_Major: {'A', 'B', 'C#', 'D', 'E', 'F#', 'G#'},
@@ -66,8 +64,6 @@ const Map<MusicalKey, Set<String>> keyNotesMap = {
   MusicalKey.B_Major: {'B', 'C#', 'D#', 'E', 'F#', 'G#', 'A#'},
   MusicalKey.F_Sharp_Major: {'F#', 'G#', 'A#', 'B', 'C#', 'D#', 'E#'},
   MusicalKey.C_Sharp_Major: {'C#', 'D#', 'E#', 'F#', 'G#', 'A#', 'B#'},
-
-  // Flats
   MusicalKey.F_Major: {'F', 'G', 'A', 'A#', 'C', 'D', 'E'},
   MusicalKey.Bb_Major: {'A#', 'C', 'D', 'D#', 'F', 'G', 'A'},
   MusicalKey.Eb_Major: {'D#', 'F', 'G', 'G#', 'A#', 'C', 'D'},
@@ -94,10 +90,8 @@ class ViolinNote {
     required this.staffIndex,
   });
 
-  // 智慧顯示：根據調性決定顯示 # 或 b 或 等音
   String getDisplayName(MusicalKey key) {
     String displayBase = baseName;
-
     if (key.accidentals < 0) {
       switch (baseName) {
         case 'A#':
@@ -135,7 +129,7 @@ class ViolinNote {
   }
 }
 
-// 完整題庫 (內部統一用 # 儲存)
+// 完整題庫
 final List<ViolinNote> allNotes = [
   // G String
   const ViolinNote(
@@ -380,8 +374,8 @@ class _ViolinAppState extends State<ViolinApp> {
 
   // --- 設定變數 ---
   double _referencePitch = 442.0;
-  Set<MusicalKey> _selectedKeys = {MusicalKey.D_Major}; // 預設單選 D 大調
-  bool _isMultiSelectMode = false; // 新增：是否為多選模式
+  Set<MusicalKey> _selectedKeys = {MusicalKey.D_Major};
+  bool _isMultiSelectMode = false;
 
   MusicalKey _currentQuestionKey = MusicalKey.D_Major;
 
@@ -479,10 +473,8 @@ class _ViolinAppState extends State<ViolinApp> {
             int total = allNotes.length;
             int sIdx = (_rangePercent.start * (total - 1)).round();
             int eIdx = (_rangePercent.end * (total - 1)).round();
-
             ViolinNote sNote = allNotes[sIdx];
             ViolinNote eNote = allNotes[eIdx];
-
             String startStr =
                 "${sNote.getDisplayName(_selectedKeys.first).replaceAll('\n', ' ')}";
             String endStr =
@@ -521,7 +513,7 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 調性選擇區塊 Header
+                  // 調性選擇區塊
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -534,7 +526,7 @@ class _ViolinAppState extends State<ViolinApp> {
                       ),
                       Row(
                         children: [
-                          const Text("多選模式: "),
+                          const Text("多選: "),
                           Switch(
                             value: _isMultiSelectMode,
                             onChanged: (val) {
@@ -546,14 +538,12 @@ class _ViolinAppState extends State<ViolinApp> {
                       ),
                     ],
                   ),
-                  // 如果開啟多選，顯示全選/重置按鈕
                   if (_isMultiSelectMode)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () {
                           setModalState(() {
-                            // 自動開啟多選 (防呆)
                             _isMultiSelectMode = true;
                             if (_selectedKeys.length ==
                                 MusicalKey.values.length) {
@@ -570,92 +560,115 @@ class _ViolinAppState extends State<ViolinApp> {
 
                   const SizedBox(height: 5),
 
+                  // --- 佈局優化：雙欄設計 (C居中，左降右升) ---
                   Expanded(
                     child: SingleChildScrollView(
-                      child: Table(
-                        columnWidths: const {
-                          0: FlexColumnWidth(1),
-                          1: FlexColumnWidth(1),
-                          2: FlexColumnWidth(1),
-                        },
-                        defaultVerticalAlignment:
-                            TableCellVerticalAlignment.middle,
+                      child: Column(
                         children: [
-                          const TableRow(
-                            children: [
-                              Center(
-                                child: Text(
-                                  "降記號 (b)",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                              Center(
-                                child: Text(
-                                  "自然",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                              Center(
-                                child: Text(
-                                  "升記號 (#)",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const TableRow(
-                            children: [
-                              SizedBox(height: 10),
-                              SizedBox(height: 10),
-                              SizedBox(height: 10),
-                            ],
-                          ),
-
-                          TableRow(
-                            children: [
-                              Container(),
-                              _buildKeyCheckbox(
+                          // 1. C Major (Natural) 置中
+                          Center(
+                            child: SizedBox(
+                              width: 120,
+                              child: _buildKeyButton(
                                 MusicalKey.C_Major,
                                 setModalState,
                               ),
-                              Container(),
-                            ],
+                            ),
                           ),
+                          const SizedBox(height: 10),
 
-                          _buildKeyRow(
-                            MusicalKey.F_Major,
-                            MusicalKey.G_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Bb_Major,
-                            MusicalKey.D_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Eb_Major,
-                            MusicalKey.A_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Ab_Major,
-                            MusicalKey.E_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Db_Major,
-                            MusicalKey.B_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Gb_Major,
-                            MusicalKey.F_Sharp_Major,
-                            setModalState,
-                          ),
-                          _buildKeyRow(
-                            MusicalKey.Cb_Major,
-                            MusicalKey.C_Sharp_Major,
-                            setModalState,
+                          // 2. 雙欄佈局
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 左欄：降記號 (Flats)
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      "降記號 (b)",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    _buildKeyButton(
+                                      MusicalKey.F_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Bb_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Eb_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Ab_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Db_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Gb_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.Cb_Major,
+                                      setModalState,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // 右欄：升記號 (Sharps)
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      "升記號 (#)",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    _buildKeyButton(
+                                      MusicalKey.G_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.D_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.A_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.E_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.B_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.F_Sharp_Major,
+                                      setModalState,
+                                    ),
+                                    _buildKeyButton(
+                                      MusicalKey.C_Sharp_Major,
+                                      setModalState,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -725,56 +738,58 @@ class _ViolinAppState extends State<ViolinApp> {
     );
   }
 
-  TableRow _buildKeyRow(
-    MusicalKey flatKey,
-    MusicalKey sharpKey,
-    StateSetter setModalState,
-  ) {
-    return TableRow(
-      children: [
-        _buildKeyCheckbox(flatKey, setModalState),
-        Container(),
-        _buildKeyCheckbox(sharpKey, setModalState),
-      ],
-    );
-  }
-
-  Widget _buildKeyCheckbox(MusicalKey key, StateSetter setModalState) {
+  Widget _buildKeyButton(MusicalKey key, StateSetter setModalState) {
     bool isSelected = _selectedKeys.contains(key);
-    return InkWell(
+
+    return GestureDetector(
       onTap: () {
         setModalState(() {
           if (_isMultiSelectMode) {
-            // 多選模式：切換狀態
             if (isSelected) {
               if (_selectedKeys.length > 1) _selectedKeys.remove(key);
             } else {
               _selectedKeys.add(key);
             }
           } else {
-            // 單選模式：直接取代，並保持選取狀態
             _selectedKeys = {key};
           }
         });
         setState(() => _nextNote());
       },
       child: Container(
-        margin: const EdgeInsets.all(4),
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        height: 55, // 降低高度讓畫面更緊湊
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[100] : Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+          color: isSelected ? Colors.blue[50] : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            if (!isSelected)
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+          ],
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              key.label.split(' ')[0],
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              key.label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isSelected ? Colors.blue[800] : Colors.black87,
+              ),
             ),
-            Text(
-              key.accidentalLabel,
-              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            const SizedBox(height: 2),
+            CustomPaint(
+              size: const Size(60, 20),
+              painter: KeySignaturePainter(accidentals: key.accidentals),
             ),
           ],
         ),
@@ -802,8 +817,14 @@ class _ViolinAppState extends State<ViolinApp> {
         break;
     }
 
-    String currentKeyLabel =
-        "${_currentQuestionKey.label} (${_currentQuestionKey.accidentalLabel})";
+    String labelText;
+    if (_currentQuestionKey.accidentals == 0) {
+      labelText = "C Major";
+    } else {
+      String sign = _currentQuestionKey.accidentals > 0 ? "#" : "b";
+      labelText =
+          "${_currentQuestionKey.label} (${_currentQuestionKey.accidentals.abs()}$sign)";
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -824,7 +845,7 @@ class _ViolinAppState extends State<ViolinApp> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             child: Text(
-              "目前調性: $currentKeyLabel",
+              "目前調性: $labelText",
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -1001,6 +1022,69 @@ class _ViolinAppState extends State<ViolinApp> {
 }
 
 // ---------------------------------------------------------
+// 新增: 迷你調號繪圖器 (KeySignaturePainter)
+// ---------------------------------------------------------
+class KeySignaturePainter extends CustomPainter {
+  final int accidentals;
+  KeySignaturePainter({required this.accidentals});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double centerY = size.height / 2;
+    final double spaceHeight = 3.0;
+    final Paint linePaint = Paint()
+      ..color = Colors.black45
+      ..strokeWidth = 1.0;
+
+    for (int i = 0; i < 5; i++) {
+      double y = centerY + (2 - i) * spaceHeight * 2;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+    }
+
+    if (accidentals == 0) return;
+
+    bool isSharp = accidentals > 0;
+    int count = accidentals.abs();
+    String symbol = isSharp ? "#" : "b";
+
+    // --- 關鍵修正：調號位置 (Standard Treble Clef Key Signature) ---
+    // Sharps: F(8), C(5), G(9), D(6), A(3), E(7), B(4)
+    List<int> sharpIndices = [8, 5, 9, 6, 3, 7, 4];
+    // Flats: B(4), E(7), A(3), D(6), G(2), C(5), F(1)
+    List<int> flatIndices = [4, 7, 3, 6, 2, 5, 1];
+
+    List<int> indices = isSharp ? sharpIndices : flatIndices;
+
+    double startX = size.width / 2 - (count * 6.0) / 2;
+
+    for (int i = 0; i < count; i++) {
+      if (i >= indices.length) break;
+      int idx = indices[i];
+      double y = centerY + 2 * spaceHeight * 2 - (idx * spaceHeight);
+
+      TextSpan span = TextSpan(
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          height: 1.0,
+        ),
+        text: symbol,
+      );
+      TextPainter tp = TextPainter(
+        text: span,
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout();
+      tp.paint(canvas, Offset(startX + i * 7.0, y - tp.height / 1.7));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ---------------------------------------------------------
 // 繪圖 1: 五線譜
 // ---------------------------------------------------------
 class StaffPainter extends CustomPainter {
@@ -1030,7 +1114,7 @@ class StaffPainter extends CustomPainter {
     bool isSharp = accCount > 0;
     int count = accCount.abs();
 
-    List<int> sharpIndices = [8, 5, 9, 6, 10, 7, 11];
+    List<int> sharpIndices = [8, 5, 9, 6, 3, 7, 4];
     List<int> flatIndices = [4, 7, 3, 6, 2, 5, 1];
 
     List<int> indicesToDraw = isSharp ? sharpIndices : flatIndices;
