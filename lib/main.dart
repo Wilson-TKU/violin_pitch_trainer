@@ -9,10 +9,9 @@ void main() {
 }
 
 // ---------------------------------------------------------
-// 1. 資料結構與頻率定義 (BSP Data Model)
+// 1. 資料結構與頻率定義
 // ---------------------------------------------------------
 
-// 定義小提琴的四條弦
 enum ViolinString { G, D, A, E }
 
 class ViolinNote {
@@ -21,9 +20,9 @@ class ViolinNote {
   final double frequency; // Base 440Hz
   final int staffIndex;
 
-  // 新增：小提琴指法資訊 (第一把位)
-  final ViolinString violinString; // 哪一條弦
-  final int finger; // 第幾指 (0=空弦, 1=食指, 2=中指, 3=無名指, 4=小指)
+  // 小提琴指法資訊 (第一把位)
+  final ViolinString violinString;
+  final int finger; // 0=空弦, 1=食指, 2=中指, 3=無名指, 4=小指
 
   const ViolinNote({
     required this.noteName,
@@ -37,7 +36,7 @@ class ViolinNote {
   String get displayName => "$noteName ($solfege)";
 }
 
-// 題庫：更新為包含指法資訊 (以第一把位 First Position 為主)
+// 題庫 (第一把位)
 const List<ViolinNote> scale = [
   // --- G 弦 ---
   ViolinNote(
@@ -72,7 +71,6 @@ const List<ViolinNote> scale = [
     violinString: ViolinString.G,
     finger: 3,
   ),
-
   // --- D 弦 ---
   ViolinNote(
     noteName: 'D4',
@@ -97,7 +95,7 @@ const List<ViolinNote> scale = [
     staffIndex: 1,
     violinString: ViolinString.D,
     finger: 2,
-  ), // F Natural (低二指)
+  ),
   ViolinNote(
     noteName: 'G4',
     solfege: 'Sol',
@@ -106,7 +104,6 @@ const List<ViolinNote> scale = [
     violinString: ViolinString.D,
     finger: 3,
   ),
-
   // --- A 弦 ---
   ViolinNote(
     noteName: 'A4',
@@ -131,7 +128,7 @@ const List<ViolinNote> scale = [
     staffIndex: 5,
     violinString: ViolinString.A,
     finger: 2,
-  ), // C Natural (低二指)
+  ),
   ViolinNote(
     noteName: 'D5',
     solfege: 'Re',
@@ -140,7 +137,6 @@ const List<ViolinNote> scale = [
     violinString: ViolinString.A,
     finger: 3,
   ),
-
   // --- E 弦 ---
   ViolinNote(
     noteName: 'E5',
@@ -157,7 +153,7 @@ const List<ViolinNote> scale = [
     staffIndex: 8,
     violinString: ViolinString.E,
     finger: 1,
-  ), // F Natural (低一指)
+  ),
   ViolinNote(
     noteName: 'G5',
     solfege: 'Sol',
@@ -165,7 +161,7 @@ const List<ViolinNote> scale = [
     staffIndex: 9,
     violinString: ViolinString.E,
     finger: 2,
-  ), // G Natural (低二指)
+  ),
   ViolinNote(
     noteName: 'A5',
     solfege: 'La',
@@ -176,14 +172,15 @@ const List<ViolinNote> scale = [
   ),
 ];
 
-// 定義練習模式
+// 定義三種練習模式
 enum PracticeMode {
-  sightReading, // 視譜反應 (看譜 -> 猜音/指法)
-  earTraining, // 聽音辨位 (聽音 -> 猜譜/指法)
+  staffToFinger, // 譜 -> 指板
+  fingerToStaff, // 指板 -> 譜
+  earTraining, // 聽 -> 全部
 }
 
 // ---------------------------------------------------------
-// 2. 核心邏輯 UI (App Logic)
+// 2. 核心邏輯 UI
 // ---------------------------------------------------------
 class ViolinApp extends StatefulWidget {
   const ViolinApp({super.key});
@@ -203,7 +200,7 @@ class _ViolinAppState extends State<ViolinApp> {
   // 設定變數
   double _referencePitch = 440.0;
   RangeValues _rangeValues = RangeValues(0, scale.length - 1.0);
-  PracticeMode _practiceMode = PracticeMode.sightReading; // 預設視譜模式
+  PracticeMode _practiceMode = PracticeMode.staffToFinger; // 預設模式
 
   @override
   void initState() {
@@ -212,8 +209,7 @@ class _ViolinAppState extends State<ViolinApp> {
   }
 
   Future<void> _nextNote() async {
-    // 關鍵修改：如果是視譜模式，按下一題要瞬間切掉上一個聲音
-    await _player.stop();
+    await _player.stop(); // 瞬間切斷舊聲音，符合「急速反應」需求
 
     int start = _rangeValues.start.round();
     int end = _rangeValues.end.round();
@@ -227,11 +223,11 @@ class _ViolinAppState extends State<ViolinApp> {
       _isAnswerVisible = false;
     });
 
-    // 播放聲音
+    // 播放聲音 (背景提示)
     double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
     final Uint8List wavBytes = ToneGenerator.generateSineWave(
       frequency: adjustedFrequency,
-      durationMs: 1500, // 稍微加長一點，方便聽音模式
+      durationMs: 1500,
       sampleRate: 44100,
     );
 
@@ -241,11 +237,8 @@ class _ViolinAppState extends State<ViolinApp> {
       debugPrint("Audio Error: $e");
     }
 
-    // 聲音播放完畢的 callback 就不強制設為 false 了，
-    // 因為我們現在允許中途切斷，狀態管理交給按鈕邏輯
     await Future.delayed(const Duration(milliseconds: 1500));
     if (mounted && _currentNote == note) {
-      // 確保不是已經切到下一題了
       setState(() => _isPlaying = false);
     }
   }
@@ -256,7 +249,18 @@ class _ViolinAppState extends State<ViolinApp> {
     });
   }
 
-  // 設定視窗
+  // 輔助函式：取得模式名稱
+  String _getModeName(PracticeMode mode) {
+    switch (mode) {
+      case PracticeMode.staffToFinger:
+        return "譜 → 指板";
+      case PracticeMode.fingerToStaff:
+        return "指板 → 譜";
+      case PracticeMode.earTraining:
+        return "聽力盲測";
+    }
+  }
+
   void _showSettings() {
     showModalBottomSheet(
       context: context,
@@ -266,7 +270,7 @@ class _ViolinAppState extends State<ViolinApp> {
           builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               padding: const EdgeInsets.all(20),
-              height: 500,
+              height: 550, // 加高一點
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -277,58 +281,42 @@ class _ViolinAppState extends State<ViolinApp> {
                   const SizedBox(height: 20),
 
                   const Text("練習模式 (Mode):", style: TextStyle(fontSize: 18)),
-                  SegmentedButton<PracticeMode>(
+                  const SizedBox(height: 10),
+                  // 使用 Wrap 防止按鈕太擠
+                  Wrap(
+                    spacing: 10.0,
+                    children: PracticeMode.values.map((mode) {
+                      return ChoiceChip(
+                        label: Text(_getModeName(mode)),
+                        selected: _practiceMode == mode,
+                        onSelected: (bool selected) {
+                          if (selected) {
+                            setModalState(() => _practiceMode = mode);
+                            setState(() => _nextNote()); // 切換模式直接換題
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+                  const Text("基準音:", style: TextStyle(fontSize: 18)),
+                  SegmentedButton<double>(
                     segments: const [
-                      ButtonSegment(
-                        value: PracticeMode.sightReading,
-                        label: Text("視譜 (看->聽)"),
-                        icon: Icon(Icons.visibility),
-                      ),
-                      ButtonSegment(
-                        value: PracticeMode.earTraining,
-                        label: Text("聽寫 (聽->看)"),
-                        icon: Icon(Icons.hearing),
-                      ),
+                      ButtonSegment(value: 440.0, label: Text("440")),
+                      ButtonSegment(value: 442.0, label: Text("442")),
                     ],
-                    selected: {_practiceMode},
-                    onSelectionChanged: (Set<PracticeMode> newSelection) {
-                      setModalState(() {
-                        _practiceMode = newSelection.first;
-                      });
-                      setState(() {
-                        _nextNote(); // 切換模式時直接換一題
-                      });
+                    selected: {_referencePitch},
+                    onSelectionChanged: (Set<double> newSelection) {
+                      setModalState(() => _referencePitch = newSelection.first);
+                      setState(() {});
                     },
                   ),
 
                   const SizedBox(height: 20),
-                  const Text(
-                    "基準音 (Reference Pitch):",
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SegmentedButton<double>(
-                          segments: const [
-                            ButtonSegment(value: 440.0, label: Text("440 Hz")),
-                            ButtonSegment(value: 442.0, label: Text("442 Hz")),
-                          ],
-                          selected: {_referencePitch},
-                          onSelectionChanged: (Set<double> newSelection) {
-                            setModalState(
-                              () => _referencePitch = newSelection.first,
-                            );
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Text("音域範圍 (Range):", style: TextStyle(fontSize: 18)),
+                  const Text("音域範圍:", style: TextStyle(fontSize: 18)),
                   Text(
-                    "${scale[_rangeValues.start.round()].displayName}  ~  ${scale[_rangeValues.end.round()].displayName}",
+                    "${scale[_rangeValues.start.round()].displayName} ~ ${scale[_rangeValues.end.round()].displayName}",
                     style: const TextStyle(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
@@ -363,22 +351,36 @@ class _ViolinAppState extends State<ViolinApp> {
 
   @override
   Widget build(BuildContext context) {
-    // 邏輯判斷：是否要顯示五線譜
-    // 1. 如果是「視譜模式」，永遠顯示
-    // 2. 如果是「聽音模式」，只有在 Answer Visible 時才顯示
-    bool showStaff =
-        _practiceMode == PracticeMode.sightReading || _isAnswerVisible;
+    // ----------------------------------------------------
+    // 邏輯控制中心：決定誰該顯示
+    // ----------------------------------------------------
+    bool showStaff = false;
+    bool showFingerboard = false;
+    bool showNoteName = _isAnswerVisible; // 答案文字永遠是最後才出來
 
-    // 邏輯判斷：是否要顯示答案文字
-    // 只有在按下 Reveal 後才顯示，無論哪種模式
-    bool showText = _isAnswerVisible;
+    switch (_practiceMode) {
+      case PracticeMode.staffToFinger:
+        // 題目: 譜 / 答案: 指板
+        showStaff = true;
+        showFingerboard = _isAnswerVisible;
+        break;
+      case PracticeMode.fingerToStaff:
+        // 題目: 指板 / 答案: 譜
+        showStaff = _isAnswerVisible;
+        showFingerboard = true;
+        break;
+      case PracticeMode.earTraining:
+        // 題目: 空 / 答案: 全部
+        showStaff = _isAnswerVisible;
+        showFingerboard = _isAnswerVisible;
+        break;
+    }
+    // ----------------------------------------------------
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          _practiceMode == PracticeMode.sightReading ? "視譜極速反應" : "聽音盲測",
-        ),
+        title: Text(_getModeName(_practiceMode)),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -387,35 +389,34 @@ class _ViolinAppState extends State<ViolinApp> {
         ],
       ),
       body: SingleChildScrollView(
-        // 防止螢幕太小溢出
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            // 1. 答案顯示區
+
+            // 1. 答案文字區 (Do, Re, Mi)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              width: 300,
+              height: 80, // 固定高度避免跳動
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: showText ? Colors.green[100] : Colors.grey[100],
+                color: showNoteName ? Colors.green[100] : Colors.grey[100],
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                showText
-                    ? (_currentNote?.displayName ?? "")
-                    : (_practiceMode == PracticeMode.sightReading
-                          ? "..."
-                          : "?"),
+                showNoteName ? (_currentNote?.displayName ?? "") : "?",
                 style: TextStyle(
-                  fontSize: 40,
+                  fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: showText ? Colors.black : Colors.grey,
+                  color: showNoteName ? Colors.black : Colors.grey,
                 ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // 2. 五線譜區 (根據模式隱藏或顯示)
+            // 2. 五線譜區
             Stack(
               alignment: Alignment.center,
               children: [
@@ -426,9 +427,10 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                 ),
                 if (!showStaff)
+                  // 顯示一個禁止符號代表被遮住
                   const Icon(
                     Icons.visibility_off,
-                    size: 50,
+                    size: 40,
                     color: Colors.grey,
                   ),
               ],
@@ -436,24 +438,27 @@ class _ViolinAppState extends State<ViolinApp> {
 
             const SizedBox(height: 20),
 
-            // 3. 小提琴指板示意圖 (新功能!)
-            // 只有在揭曉答案，或是視譜模式下才顯示
-            if (showStaff) ...[
-              const Text(
-                "指板位置 (Fingerboard)",
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
+            // 3. 指板區 (你的虛擬小提琴)
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(300, 160),
+                  // 如果不顯示指板，傳入 null 給 painter，它會畫空指板或什麼都不畫
+                  painter: ViolinFingerboardPainter(
+                    note: showFingerboard ? _currentNote : null,
+                    showBoard: true, // 永遠畫出指板框線，但手指位置根據邏輯顯示
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              CustomPaint(
-                size: const Size(300, 150), // 寬度 300, 高度 150
-                painter: ViolinFingerboardPainter(note: _currentNote),
-              ),
-            ] else ...[
-              const SizedBox(height: 160 + 30), // 佔位符，保持介面高度不跳動
-            ],
+                if (!showFingerboard)
+                  const Center(
+                    child: Text(
+                      "?",
+                      style: TextStyle(fontSize: 50, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
 
             const SizedBox(height: 30),
 
@@ -464,7 +469,6 @@ class _ViolinAppState extends State<ViolinApp> {
                 IconButton(
                   icon: const Icon(Icons.replay, size: 30),
                   onPressed: () async {
-                    // 重播邏輯
                     if (_currentNote != null) {
                       double adjFreq =
                           _currentNote!.frequency * (_referencePitch / 440.0);
@@ -473,21 +477,18 @@ class _ViolinAppState extends State<ViolinApp> {
                         durationMs: 1000,
                         sampleRate: 44100,
                       );
-                      await _player.stop(); // 先停再播
+                      await _player.stop();
                       await _player.play(BytesSource(wavBytes));
                     }
                   },
-                  tooltip: "再聽一次",
                 ),
-
-                // 智慧按鈕
                 ElevatedButton.icon(
                   onPressed: _isAnswerVisible ? _nextNote : _revealAnswer,
                   icon: Icon(
                     _isAnswerVisible ? Icons.arrow_forward : Icons.visibility,
                   ),
                   label: Text(
-                    _isAnswerVisible ? "下一題 (Next)" : "看答案 (Reveal)",
+                    _isAnswerVisible ? "下一題" : "看答案",
                     style: const TextStyle(fontSize: 20),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -512,7 +513,7 @@ class _ViolinAppState extends State<ViolinApp> {
 }
 
 // ---------------------------------------------------------
-// 3. 繪圖引擎 - 五線譜 (StaffPainter)
+// 3. 繪圖引擎 - 五線譜
 // ---------------------------------------------------------
 class StaffPainter extends CustomPainter {
   final int? noteIndex;
@@ -526,10 +527,9 @@ class StaffPainter extends CustomPainter {
     final Paint notePaint = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.fill;
-    const double spaceHeight = 12.0; // 稍微縮小一點適應螢幕
+    const double spaceHeight = 12.0;
     final double centerY = size.height / 2;
 
-    // 畫五線
     for (int i = 0; i < 5; i++) {
       double y = centerY + (2 - i) * spaceHeight * 2;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
@@ -547,7 +547,6 @@ class StaffPainter extends CustomPainter {
         notePaint,
       );
 
-      // 加線
       if (noteIndex! < -1) {
         for (int i = -2; i >= noteIndex!; i -= 2) {
           double lineY = baseLineY - (i * spaceHeight);
@@ -576,14 +575,18 @@ class StaffPainter extends CustomPainter {
 }
 
 // ---------------------------------------------------------
-// 4. 繪圖引擎 - 小提琴指板 (ViolinFingerboardPainter)
+// 4. 繪圖引擎 - 小提琴指板 (更新版)
 // ---------------------------------------------------------
 class ViolinFingerboardPainter extends CustomPainter {
   final ViolinNote? note;
-  ViolinFingerboardPainter({this.note});
+  final bool showBoard; // 是否顯示指板背景
+
+  ViolinFingerboardPainter({this.note, this.showBoard = true});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (!showBoard) return;
+
     final Paint stringPaint = Paint()
       ..color = Colors.grey
       ..strokeWidth = 2.0;
@@ -597,26 +600,26 @@ class ViolinFingerboardPainter extends CustomPainter {
       ..color = Colors.black
       ..strokeWidth = 6.0;
 
-    // 參數定義
-    double stringSpacing = size.width / 5; // 四條弦平分寬度
+    double stringSpacing = size.width / 5;
     double startX = stringSpacing;
-    double topY = 20.0; // 弦枕位置
+    double topY = 20.0;
     double stringLength = size.height - 20;
 
-    // 1. 畫弦枕 (Nut)
+    // 1. 畫弦枕 (上方的粗黑線)
     canvas.drawLine(
       Offset(startX - 10, topY),
       Offset(startX + stringSpacing * 3 + 10, topY),
       nutPaint,
     );
 
-    // 2. 畫四條弦 (G, D, A, E)
+    // 弦的標籤
     List<String> labels = ["G", "D", "A", "E"];
+
+    // 2. 畫四條弦
     for (int i = 0; i < 4; i++) {
       double x = startX + i * stringSpacing;
-
-      // 如果是當前選到的弦，畫粗一點
-      bool isTargetString = note != null && note!.violinString.index == i;
+      // 如果 note 存在且是這條弦，就加粗顯示
+      bool isTargetString = (note != null) && (note!.violinString.index == i);
 
       canvas.drawLine(
         Offset(x, topY),
@@ -624,7 +627,6 @@ class ViolinFingerboardPainter extends CustomPainter {
         isTargetString ? stringHighlightPaint : stringPaint,
       );
 
-      // 畫弦的名稱 (G, D, A, E)
       TextSpan span = TextSpan(
         style: const TextStyle(
           color: Colors.black,
@@ -639,18 +641,16 @@ class ViolinFingerboardPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       );
       tp.layout();
-      tp.paint(canvas, Offset(x - tp.width / 2, 0)); // 標籤在最上面
+      tp.paint(canvas, Offset(x - tp.width / 2, 0));
     }
 
-    // 3. 畫按手指的位置
+    // 3. 畫手指位置
     if (note != null) {
       double x = startX + note!.violinString.index * stringSpacing;
-
-      // 計算手指的 Y 軸位置 (模擬指板間距，越往下一指距離越寬)
-      // 簡單模擬：每指大概間距 30
       double fingerY = topY;
+
       if (note!.finger == 0) {
-        // 空弦：畫一個空心圓在弦枕上方
+        // 空弦: 藍色空心圓
         canvas.drawCircle(
           Offset(x, topY - 10),
           6,
@@ -660,15 +660,14 @@ class ViolinFingerboardPainter extends CustomPainter {
             ..strokeWidth = 2,
         );
       } else {
-        // 1, 2, 3, 4 指
-        // 這裡做簡單的距離模擬
+        // 按指: 紅色實心圓
+        // 模擬第一把位音程距離
         List<double> fingerOffsets = [0, 35, 65, 95, 125];
         fingerY += fingerOffsets[note!.finger];
 
-        // 畫紅色實心圓代表按壓點
         canvas.drawCircle(Offset(x, fingerY), 8, fingerPaint);
 
-        // 標示指法數字
+        // 寫出指法數字 (1, 2, 3...)
         TextSpan span = TextSpan(
           style: const TextStyle(color: Colors.white, fontSize: 10),
           text: "${note!.finger}",
@@ -689,7 +688,7 @@ class ViolinFingerboardPainter extends CustomPainter {
 }
 
 // ---------------------------------------------------------
-// 5. 音訊合成器 (ToneGenerator) - 保持不變
+// 5. 音訊合成器 (保持不變)
 // ---------------------------------------------------------
 class ToneGenerator {
   static Uint8List generateSineWave({
