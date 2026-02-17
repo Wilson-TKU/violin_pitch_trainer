@@ -11,14 +11,12 @@ void main() {
 // ---------------------------------------------------------
 // 1. 資料結構與頻率定義 (BSP Data Model)
 // ---------------------------------------------------------
-// 1. 資料結構更新：加入唱名邏輯
 class ViolinNote {
-  final String noteName; // 音名 (e.g. G3)
-  final String solfege; // 唱名 (e.g. Sol)
-  final double frequency; // 頻率
-  final int staffIndex; // 五線譜位置
+  final String noteName;
+  final String solfege;
+  final double frequency; // 這是以 440Hz 為基準的頻率
+  final int staffIndex;
 
-  // 建構子稍微改一下，自動組合成顯示字串
   const ViolinNote({
     required this.noteName,
     required this.solfege,
@@ -26,112 +24,31 @@ class ViolinNote {
     required this.staffIndex,
   });
 
-  // Getter: 方便UI直接拿 "G3 (Sol)" 這種格式
   String get displayName => "$noteName ($solfege)";
 }
 
-// 2. 題庫更新：小提琴常用音域 (包含空弦與手指按音)
+// 題庫：以 A4=440Hz 為基準
 const List<ViolinNote> scale = [
-  // --- G 弦 (G3 ~ C4) ---
-  ViolinNote(
-    noteName: 'G3',
-    solfege: 'Sol',
-    frequency: 196.00,
-    staffIndex: -5,
-  ), // G弦空弦 (最低音)
-  ViolinNote(
-    noteName: 'A3',
-    solfege: 'La',
-    frequency: 220.00,
-    staffIndex: -4,
-  ), // G弦一指
-  ViolinNote(
-    noteName: 'B3',
-    solfege: 'Si',
-    frequency: 246.94,
-    staffIndex: -3,
-  ), // G弦二指
-  ViolinNote(
-    noteName: 'C4',
-    solfege: 'Do',
-    frequency: 261.63,
-    staffIndex: -2,
-  ), // 中央C (G弦三指)
-  // --- D 弦 (D4 ~ G4) ---
-  ViolinNote(
-    noteName: 'D4',
-    solfege: 'Re',
-    frequency: 293.66,
-    staffIndex: -1,
-  ), // D弦空弦
-  ViolinNote(
-    noteName: 'E4',
-    solfege: 'Mi',
-    frequency: 329.63,
-    staffIndex: 0,
-  ), // 第一線
-  ViolinNote(
-    noteName: 'F4',
-    solfege: 'Fa',
-    frequency: 349.23,
-    staffIndex: 1,
-  ), // D弦二指(低)
-  ViolinNote(
-    noteName: 'G4',
-    solfege: 'Sol',
-    frequency: 392.00,
-    staffIndex: 2,
-  ), // D弦三指
-  // --- A 弦 (A4 ~ D5) ---
-  ViolinNote(
-    noteName: 'A4',
-    solfege: 'La',
-    frequency: 440.00,
-    staffIndex: 3,
-  ), // A弦空弦 (標準音)
-  ViolinNote(
-    noteName: 'B4',
-    solfege: 'Si',
-    frequency: 493.88,
-    staffIndex: 4,
-  ), // 第三線
-  ViolinNote(
-    noteName: 'C5',
-    solfege: 'Do',
-    frequency: 523.25,
-    staffIndex: 5,
-  ), // A弦二指(低)
-  ViolinNote(
-    noteName: 'D5',
-    solfege: 'Re',
-    frequency: 587.33,
-    staffIndex: 6,
-  ), // A弦三指
-  // --- E 弦 (E5 ~ A5) ---
-  ViolinNote(
-    noteName: 'E5',
-    solfege: 'Mi',
-    frequency: 659.25,
-    staffIndex: 7,
-  ), // E弦空弦
-  ViolinNote(
-    noteName: 'F5',
-    solfege: 'Fa',
-    frequency: 698.46,
-    staffIndex: 8,
-  ), // 第五線
-  ViolinNote(
-    noteName: 'G5',
-    solfege: 'Sol',
-    frequency: 783.99,
-    staffIndex: 9,
-  ), // 上加一間
-  ViolinNote(
-    noteName: 'A5',
-    solfege: 'La',
-    frequency: 880.00,
-    staffIndex: 10,
-  ), // E弦三指
+  // --- G 弦 ---
+  ViolinNote(noteName: 'G3', solfege: 'Sol', frequency: 196.00, staffIndex: -5),
+  ViolinNote(noteName: 'A3', solfege: 'La', frequency: 220.00, staffIndex: -4),
+  ViolinNote(noteName: 'B3', solfege: 'Si', frequency: 246.94, staffIndex: -3),
+  ViolinNote(noteName: 'C4', solfege: 'Do', frequency: 261.63, staffIndex: -2),
+  // --- D 弦 ---
+  ViolinNote(noteName: 'D4', solfege: 'Re', frequency: 293.66, staffIndex: -1),
+  ViolinNote(noteName: 'E4', solfege: 'Mi', frequency: 329.63, staffIndex: 0),
+  ViolinNote(noteName: 'F4', solfege: 'Fa', frequency: 349.23, staffIndex: 1),
+  ViolinNote(noteName: 'G4', solfege: 'Sol', frequency: 392.00, staffIndex: 2),
+  // --- A 弦 ---
+  ViolinNote(noteName: 'A4', solfege: 'La', frequency: 440.00, staffIndex: 3),
+  ViolinNote(noteName: 'B4', solfege: 'Si', frequency: 493.88, staffIndex: 4),
+  ViolinNote(noteName: 'C5', solfege: 'Do', frequency: 523.25, staffIndex: 5),
+  ViolinNote(noteName: 'D5', solfege: 'Re', frequency: 587.33, staffIndex: 6),
+  // --- E 弦 ---
+  ViolinNote(noteName: 'E5', solfege: 'Mi', frequency: 659.25, staffIndex: 7),
+  ViolinNote(noteName: 'F5', solfege: 'Fa', frequency: 698.46, staffIndex: 8),
+  ViolinNote(noteName: 'G5', solfege: 'Sol', frequency: 783.99, staffIndex: 9),
+  ViolinNote(noteName: 'A5', solfege: 'La', frequency: 880.00, staffIndex: 10),
 ];
 
 // ---------------------------------------------------------
@@ -150,30 +67,50 @@ class _ViolinAppState extends State<ViolinApp> {
 
   ViolinNote? _currentNote;
   bool _isPlaying = false;
-
-  // 新增：控制答案顯示的布林值 (Flag)
   bool _isAnswerVisible = false;
+
+  // --- 新增設定變數 ---
+  double _referencePitch = 440.0; // 基準音 (440 或 442)
+  RangeValues _rangeValues = const RangeValues(
+    0,
+    15,
+  ); // 預設全選 (0 到 scale.length-1)
 
   @override
   void initState() {
     super.initState();
+    // 初始化範圍為整個題庫
+    _rangeValues = RangeValues(0, scale.length - 1.0);
     _nextNote();
   }
 
+  // 抽出下一個題目的邏輯
   Future<void> _nextNote() async {
     if (_isPlaying) return;
 
-    final note = scale[_rng.nextInt(scale.length)];
+    // 1. 根據設定的範圍，計算出合法的 index 列表
+    int start = _rangeValues.start.round();
+    int end = _rangeValues.end.round();
+
+    // 防呆：如果範圍太小
+    if (end < start) end = start;
+
+    // 2. 在範圍內隨機選一個
+    int randomIndex = start + _rng.nextInt(end - start + 1);
+    final note = scale[randomIndex];
 
     setState(() {
       _currentNote = note;
       _isPlaying = true;
-      _isAnswerVisible = false; // 每次出新題目時，先把答案蓋起來
+      _isAnswerVisible = false;
     });
 
-    // 合成並播放聲音
+    // 3. 計算頻率 (440 vs 442)
+    // 公式： 新頻率 = 原頻率 * (設定基準 / 440)
+    double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
+
     final Uint8List wavBytes = ToneGenerator.generateSineWave(
-      frequency: note.frequency,
+      frequency: adjustedFrequency,
       durationMs: 1000,
       sampleRate: 44100,
     );
@@ -188,23 +125,120 @@ class _ViolinAppState extends State<ViolinApp> {
     if (mounted) setState(() => _isPlaying = false);
   }
 
-  // 新增：揭曉答案的邏輯
   void _revealAnswer() {
     setState(() {
       _isAnswerVisible = true;
     });
   }
 
+  // 顯示設定視窗
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        // 使用 StatefulBuilder 讓 BottomSheet 內部的 Slider 可以即時更新 UI
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              height: 400,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "設定 (Settings)",
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 1. 基準音設定
+                  const Text(
+                    "基準音 (Reference Pitch):",
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SegmentedButton<double>(
+                          segments: const [
+                            ButtonSegment(value: 440.0, label: Text("440 Hz")),
+                            ButtonSegment(value: 442.0, label: Text("442 Hz")),
+                          ],
+                          selected: {_referencePitch},
+                          onSelectionChanged: (Set<double> newSelection) {
+                            setModalState(() {
+                              _referencePitch = newSelection.first;
+                            });
+                            // 同步更新外面的 State
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // 2. 音域範圍設定
+                  const Text("考試範圍 (Range):", style: TextStyle(fontSize: 18)),
+                  Text(
+                    "${scale[_rangeValues.start.round()].displayName}  ~  ${scale[_rangeValues.end.round()].displayName}",
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  RangeSlider(
+                    values: _rangeValues,
+                    min: 0,
+                    max: scale.length - 1.0,
+                    divisions: scale.length - 1,
+                    labels: RangeLabels(
+                      scale[_rangeValues.start.round()].noteName,
+                      scale[_rangeValues.end.round()].noteName,
+                    ),
+                    onChanged: (RangeValues values) {
+                      setModalState(() {
+                        _rangeValues = values;
+                      });
+                      setState(() {});
+                    },
+                  ),
+
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("完成"),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: const Text("小提琴音感考試模式")),
+      appBar: AppBar(
+        title: Text("小提琴音感 (${_referencePitch.toInt()} Hz)"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
+          ),
+        ],
+      ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 1. 題目區 (唱名)
-          // 這裡運用三元運算子 (Ternary Operator) 來決定顯示什麼
+          // 題目區
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -214,7 +248,6 @@ class _ViolinAppState extends State<ViolinApp> {
             child: Column(
               children: [
                 Text(
-                  // 如果 _isAnswerVisible 是 true 就顯示名字，否則顯示問號
                   _isAnswerVisible
                       ? (_currentNote?.displayName ?? "Ready")
                       : "?",
@@ -224,7 +257,6 @@ class _ViolinAppState extends State<ViolinApp> {
                     color: _isAnswerVisible ? Colors.black : Colors.grey,
                   ),
                 ),
-                // 如果答案還沒揭曉，顯示提示文字
                 if (!_isAnswerVisible && _currentNote != null)
                   const Padding(
                     padding: EdgeInsets.only(top: 10),
@@ -239,8 +271,7 @@ class _ViolinAppState extends State<ViolinApp> {
 
           const SizedBox(height: 40),
 
-          // 2. 五線譜繪圖區 (視覺提示)
-          // 目前我們先保留「顯示位置」，因為你說要連結「視覺與聽覺」
+          // 五線譜區
           Center(
             child: CustomPaint(
               size: const Size(300, 200),
@@ -250,12 +281,10 @@ class _ViolinAppState extends State<ViolinApp> {
 
           const SizedBox(height: 60),
 
-          // 3. 操作按鈕區
+          // 按鈕區
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // 按鈕 A: 重聽一次 (Replay)
-              // 這是給考試用的實用功能
               IconButton(
                 icon: const Icon(Icons.replay, size: 30),
                 onPressed: _isPlaying
@@ -263,8 +292,13 @@ class _ViolinAppState extends State<ViolinApp> {
                     : () async {
                         if (_currentNote != null) {
                           setState(() => _isPlaying = true);
+                          // Replay 也要套用新的頻率公式
+                          double adjustedFrequency =
+                              _currentNote!.frequency *
+                              (_referencePitch / 440.0);
+
                           final wavBytes = ToneGenerator.generateSineWave(
-                            frequency: _currentNote!.frequency,
+                            frequency: adjustedFrequency,
                             durationMs: 1000,
                             sampleRate: 44100,
                           );
@@ -274,11 +308,6 @@ class _ViolinAppState extends State<ViolinApp> {
                       },
                 tooltip: "再聽一次",
               ),
-
-              // 按鈕 B: 揭曉答案 / 下一題
-              // 這裡做了一個 UX 優化：
-              // 如果答案還沒開 -> 按鈕顯示「看答案」
-              // 如果答案已開 -> 按鈕顯示「下一題」
               ElevatedButton.icon(
                 onPressed: _isPlaying
                     ? null
@@ -298,7 +327,7 @@ class _ViolinAppState extends State<ViolinApp> {
                   backgroundColor: _isAnswerVisible
                       ? Colors.blue
                       : Colors.orange,
-                  foregroundColor: Colors.white, // 文字顏色
+                  foregroundColor: Colors.white,
                 ),
               ),
             ],
@@ -310,10 +339,10 @@ class _ViolinAppState extends State<ViolinApp> {
 }
 
 // ---------------------------------------------------------
-// 3. 繪圖引擎 (Graphics / Framebuffer Logic)
+// 3. 繪圖引擎 (StaffPainter)
 // ---------------------------------------------------------
 class StaffPainter extends CustomPainter {
-  final int? noteIndex; // 0 = E4 Line
+  final int? noteIndex;
 
   StaffPainter({this.noteIndex});
 
@@ -327,34 +356,20 @@ class StaffPainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.fill;
 
-    // 定義間距
     const double spaceHeight = 15.0;
-
-    // 計算五條線的 Y 軸位置 (置中)
-    // 我們希望 E4 (第一線) 在某個基準點
-    // 五線譜由下而上：E4, G4, B4, D5, F5
     final double centerY = size.height / 2;
 
-    // 畫五條線
+    // 畫五線譜 (由下往上：E4, G4, B4, D5, F5)
     for (int i = 0; i < 5; i++) {
-      // i=0 是最下線 (E4)
-      // 在 Canvas 座標中，Y 越大越下面。
-      // 為了讓 i=0 在最下面，我們設 base 為 centerY + 2格，然後往上減
       double y = centerY + (2 - i) * spaceHeight * 2;
-      // *2 是因為線與線之間隔了一個「間」
-
       canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
     }
 
-    // 畫音符
     if (noteIndex != null) {
-      // 基準線 E4 (i=0) 的 Y 座標
-      double baseLineY = centerY + 2 * spaceHeight * 2;
-
-      // 每個 index 代表半個間距 (spaceHeight)
+      double baseLineY = centerY + 2 * spaceHeight * 2; // E4 (第一線)
       double noteY = baseLineY - (noteIndex! * spaceHeight);
 
-      // 畫豆豆
+      // 畫音符豆豆
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(size.width / 2, noteY),
@@ -364,10 +379,23 @@ class StaffPainter extends CustomPainter {
         notePaint,
       );
 
-      // 簡單的加線邏輯 (Leger Lines) - 針對 G3, A3, C4
-      // 如果音符在第一線以下 (index < 0) 且是偶數位置(代表在線上的音)
+      // 加線邏輯
+      // 下加線 (Lower Leger Lines): index < -1 (低於 D4)
       if (noteIndex! < -1) {
+        // 從 -2 (C4) 開始往下畫，每次跳 2 格 (一線)
         for (int i = -2; i >= noteIndex!; i -= 2) {
+          double lineY = baseLineY - (i * spaceHeight);
+          canvas.drawLine(
+            Offset(size.width / 2 - 20, lineY),
+            Offset(size.width / 2 + 20, lineY),
+            linePaint,
+          );
+        }
+      }
+      // 上加線 (Upper Leger Lines): index > 9 (高於 G5)
+      // 第五線 F5 是 index 8, 上加一間 G5 是 9, 上加一線 A5 是 10
+      if (noteIndex! > 9) {
+        for (int i = 10; i <= noteIndex!; i += 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
             Offset(size.width / 2 - 20, lineY),
@@ -384,62 +412,48 @@ class StaffPainter extends CustomPainter {
 }
 
 // ---------------------------------------------------------
-// 4. 音訊合成器 (DSP / Wave Generation)
+// 4. 音訊合成器 (ToneGenerator)
 // ---------------------------------------------------------
 class ToneGenerator {
-  // 產生標準的 WAV Header + PCM Data
   static Uint8List generateSineWave({
     required double frequency,
     required int durationMs,
     required int sampleRate,
   }) {
     int numSamples = (durationMs * sampleRate) ~/ 1000;
-    int byteRate = sampleRate * 2; // 16-bit mono = 2 bytes per sample
+    int byteRate = sampleRate * 2;
     int dataSize = numSamples * 2;
     int fileSize = 36 + dataSize;
 
     final buffer = BytesBuilder();
 
-    // --- RIFF Header ---
     buffer.add("RIFF".codeUnits);
     buffer.add(_int32(fileSize));
     buffer.add("WAVE".codeUnits);
-
-    // --- fmt Chunk ---
     buffer.add("fmt ".codeUnits);
-    buffer.add(_int32(16)); // PCM chunk size
-    buffer.add(_int16(1)); // AudioFormat 1 = PCM
-    buffer.add(_int16(1)); // Channels 1 = Mono
+    buffer.add(_int32(16));
+    buffer.add(_int16(1));
+    buffer.add(_int16(1));
     buffer.add(_int32(sampleRate));
     buffer.add(_int32(byteRate));
-    buffer.add(_int16(2)); // BlockAlign
-    buffer.add(_int16(16)); // BitsPerSample
-
-    // --- data Chunk ---
+    buffer.add(_int16(2));
+    buffer.add(_int16(16));
     buffer.add("data".codeUnits);
     buffer.add(_int32(dataSize));
 
-    // --- PCM Payload (Sinewave) ---
     for (int i = 0; i < numSamples; i++) {
       double t = i / sampleRate;
-      // 振幅設為 0.5 避免爆音 (MAX 32767)
       double sample = 16000 * sin(2 * pi * frequency * t);
       buffer.add(_int16(sample.toInt()));
     }
-
     return buffer.toBytes();
   }
 
-  static List<int> _int32(int value) {
-    return [
-      value & 0xff,
-      (value >> 8) & 0xff,
-      (value >> 16) & 0xff,
-      (value >> 24) & 0xff,
-    ];
-  }
-
-  static List<int> _int16(int value) {
-    return [value & 0xff, (value >> 8) & 0xff];
-  }
+  static List<int> _int32(int value) => [
+    value & 0xff,
+    (value >> 8) & 0xff,
+    (value >> 16) & 0xff,
+    (value >> 24) & 0xff,
+  ];
+  static List<int> _int16(int value) => [value & 0xff, (value >> 8) & 0xff];
 }
