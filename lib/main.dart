@@ -30,12 +30,13 @@ class _ViolinAppState extends State<ViolinApp> {
   bool _isAnswerVisible = false;
 
   // --- 設定變數 ---
+  // [修正] 預設為 442Hz (你可以隨時改為 440.0)
   double _referencePitch = 442.0;
-  // 預設單選 D 大調
   Set<MusicalKey> _selectedKeys = {MusicalKey.D_Major};
   bool _isMultiSelectMode = false;
 
   MusicalKey _currentQuestionKey = MusicalKey.D_Major;
+  ViolinPosition _currentPosition = ViolinPosition.first;
 
   PracticeMode _practiceMode = PracticeMode.staffToFinger;
   RangeValues _rangePercent = const RangeValues(0.0, 1.0);
@@ -55,10 +56,9 @@ class _ViolinAppState extends State<ViolinApp> {
     List<MusicalKey> availableKeys = _selectedKeys.toList();
     _currentQuestionKey = availableKeys[_rng.nextInt(availableKeys.length)];
 
-    // 2. 根據該調性過濾題目 (使用 scale_data.dart 中的資料)
+    // 2. 根據該調性過濾題目
     Set<String> validBaseNames = keyNotesMap[_currentQuestionKey] ?? {};
     List<ViolinNote> validNotes = allNotes.where((note) {
-      // 處理特殊等音情況
       if (_currentQuestionKey == MusicalKey.F_Sharp_Major &&
           note.baseName == 'F')
         return true;
@@ -89,8 +89,10 @@ class _ViolinAppState extends State<ViolinApp> {
       _isAnswerVisible = false;
     });
 
-    // 4. 播放聲音 (使用 audio_gen.dart)
+    // 4. [修正] 播放聲音時，應用基準音計算 (440 vs 442)
+    // 公式: 目標頻率 = 標準頻率 * (設定基準 / 440)
     double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
+
     final Uint8List wavBytes = ToneGenerator.generateSineWave(
       frequency: adjustedFrequency,
       durationMs: 1500,
@@ -134,7 +136,6 @@ class _ViolinAppState extends State<ViolinApp> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
-            // 計算範圍顯示文字
             int total = allNotes.length;
             int sIdx = (_rangePercent.start * (total - 1)).round();
             int eIdx = (_rangePercent.end * (total - 1)).round();
@@ -181,7 +182,31 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 2. 調性選擇
+                  // 2. 把位選擇
+                  const Text(
+                    "把位 (Position):",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  SegmentedButton<ViolinPosition>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ViolinPosition.first,
+                        label: Text("First (第一)"),
+                      ),
+                      ButtonSegment(
+                        value: ViolinPosition.third,
+                        label: Text("Third (第三)"),
+                      ),
+                    ],
+                    selected: {_currentPosition},
+                    onSelectionChanged: (newVal) {
+                      setModalState(() => _currentPosition = newVal.first);
+                      setState(() => _currentPosition = newVal.first);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 3. 調性選擇
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -228,7 +253,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
                   const SizedBox(height: 5),
 
-                  // 調性按鈕佈局 (C置中，左降右升)
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -340,23 +364,24 @@ class _ViolinAppState extends State<ViolinApp> {
 
                   const SizedBox(height: 10),
 
-                  // 3. 基準音與範圍
+                  // 4. [修正] 基準音選擇 (加回來了!)
                   const Text(
-                    "基準音:",
+                    "基準音 (Reference Pitch):",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   SegmentedButton<double>(
                     segments: const [
-                      ButtonSegment(value: 440.0, label: Text("440")),
-                      ButtonSegment(value: 442.0, label: Text("442")),
+                      ButtonSegment(value: 440.0, label: Text("440 Hz")),
+                      ButtonSegment(value: 442.0, label: Text("442 Hz")),
                     ],
                     selected: {_referencePitch},
                     onSelectionChanged: (newVal) {
                       setModalState(() => _referencePitch = newVal.first);
+                      // 注意：這裡只更新變數，不會馬上重播，下一題生效
                       setState(() {});
                     },
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 15),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -403,7 +428,6 @@ class _ViolinAppState extends State<ViolinApp> {
     );
   }
 
-  // 建立調性選擇按鈕 Widget
   Widget _buildKeyButton(MusicalKey key, StateSetter setModalState) {
     bool isSelected = _selectedKeys.contains(key);
 
@@ -453,7 +477,6 @@ class _ViolinAppState extends State<ViolinApp> {
               ),
             ),
             const SizedBox(height: 2),
-            // 使用 widgets/painters.dart 中的 KeySignaturePainter
             CustomPaint(
               size: const Size(60, 20),
               painter: KeySignaturePainter(accidentals: key.accidentals),
@@ -506,14 +529,13 @@ class _ViolinAppState extends State<ViolinApp> {
       ),
       body: Column(
         children: [
-          // 頂部資訊列
           Container(
             width: double.infinity,
             color: Colors.blue[50],
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             child: Text(
-              "目前調性: $labelText",
+              "目前調性: $labelText (${_currentPosition.label})",
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -522,7 +544,6 @@ class _ViolinAppState extends State<ViolinApp> {
             ),
           ),
 
-          // 1. 五線譜區域
           Expanded(
             flex: 35,
             child: Container(
@@ -533,7 +554,6 @@ class _ViolinAppState extends State<ViolinApp> {
                 children: [
                   CustomPaint(
                     size: Size.infinite,
-                    // 使用 widgets/painters.dart 中的 StaffPainter
                     painter: StaffPainter(
                       noteIndex: showStaff ? _currentNote?.staffIndex : null,
                       keySignature: _currentQuestionKey,
@@ -552,12 +572,10 @@ class _ViolinAppState extends State<ViolinApp> {
 
           const Divider(height: 1, thickness: 1),
 
-          // 2. 下半部區域
           Expanded(
             flex: 65,
             child: Row(
               children: [
-                // 指板
                 Expanded(
                   flex: 6,
                   child: Container(
@@ -571,12 +589,12 @@ class _ViolinAppState extends State<ViolinApp> {
                       children: [
                         CustomPaint(
                           size: Size.infinite,
-                          // 使用 widgets/painters.dart 中的 ViolinFingerboardPainter
                           painter: ViolinFingerboardPainter(
                             targetNote: showFingerboardAnswer
                                 ? _currentNote
                                 : null,
                             currentKey: _currentQuestionKey,
+                            currentPosition: _currentPosition,
                           ),
                         ),
                         if (_practiceMode == PracticeMode.staffToFinger &&
@@ -600,7 +618,6 @@ class _ViolinAppState extends State<ViolinApp> {
                   ),
                 ),
 
-                // 操作按鈕與資訊
                 Expanded(
                   flex: 4,
                   child: Container(

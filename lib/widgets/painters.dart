@@ -1,7 +1,7 @@
-import 'dart:math';
+import 'dart:math'; // [修正] 補上這行，才能使用 pow
 import 'package:flutter/material.dart';
 import '../models/note.dart';
-import '../models/scale_data.dart'; // 需要引用 allNotes
+import '../utils/violin_logic.dart';
 
 // --- 迷你調號繪圖器 ---
 class KeySignaturePainter extends CustomPainter {
@@ -90,6 +90,7 @@ class StaffPainter extends CustomPainter {
 
     List<int> sharpIndices = [8, 5, 9, 6, 3, 7, 4];
     List<int> flatIndices = [4, 7, 3, 6, 2, 5, 1];
+
     List<int> indicesToDraw = isSharp ? sharpIndices : flatIndices;
     String symbol = isSharp ? "#" : "b";
 
@@ -153,69 +154,15 @@ class StaffPainter extends CustomPainter {
 class ViolinFingerboardPainter extends CustomPainter {
   final ViolinNote? targetNote;
   final MusicalKey currentKey;
+  final ViolinPosition currentPosition;
 
-  ViolinFingerboardPainter({this.targetNote, required this.currentKey});
+  ViolinFingerboardPainter({
+    this.targetNote,
+    required this.currentKey,
+    this.currentPosition = ViolinPosition.first,
+  });
 
-  final double openStringLength = 325.0;
-  final List<double> openFreqs = [196.00, 293.66, 440.00, 659.25];
   final List<String> stringNames = ["G", "D", "A", "E"];
-
-  // 之後這部分邏輯會被移到 utils/violin_logic.dart
-  double _calculatePosition(int semitonesFromOpen) {
-    if (semitonesFromOpen <= 0) return -12;
-    return openStringLength * (1 - 1 / pow(2, semitonesFromOpen / 12.0));
-  }
-
-  // 之後這部分邏輯會被移到 utils/violin_logic.dart
-  ({ViolinNote? note, bool isInKey, int semitones}) _analyzeFrequency(
-    double freq,
-    int stringIdx,
-  ) {
-    double openFreq = openFreqs[stringIdx];
-    if (freq < openFreq * 0.98)
-      return (note: null, isInKey: false, semitones: -1);
-
-    double ratio = freq / openFreq;
-    double semitonesFloat = (log(ratio) / log(2) * 12);
-    int semitones = semitonesFloat.round();
-    if (semitones > 8) return (note: null, isInKey: false, semitones: -1);
-
-    ViolinNote? foundNote;
-    for (var n in allNotes) {
-      if ((n.frequency - freq).abs() < 1.0) {
-        foundNote = n;
-        break;
-      }
-    }
-
-    if (foundNote == null)
-      return (note: null, isInKey: false, semitones: semitones);
-
-    bool isInKey = false;
-    Set<String> validBaseNames = keyNotesMap[currentKey] ?? {};
-    if (validBaseNames.contains(foundNote.baseName)) {
-      isInKey = true;
-    } else {
-      if (currentKey == MusicalKey.F_Sharp_Major && foundNote.baseName == 'F')
-        isInKey = true;
-      if (currentKey == MusicalKey.C_Sharp_Major &&
-          (foundNote.baseName == 'F' || foundNote.baseName == 'C'))
-        isInKey = true;
-      if (currentKey == MusicalKey.Cb_Major &&
-          (foundNote.baseName == 'B' || foundNote.baseName == 'E'))
-        isInKey = true;
-    }
-
-    return (note: foundNote, isInKey: isInKey, semitones: semitones);
-  }
-
-  int _calcFingerNum(int semitones) {
-    if (semitones == 0) return 0;
-    if (semitones <= 2) return 1;
-    if (semitones <= 4) return 2;
-    if (semitones <= 6) return 3;
-    return 4;
-  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -236,6 +183,7 @@ class ViolinFingerboardPainter extends CustomPainter {
       ..color = Colors.white
       ..strokeWidth = 3.0;
 
+    // 背景指板
     Path boardPath = Path();
     double topWidth = size.width * 0.65;
     double bottomWidth = size.width * 0.85;
@@ -257,27 +205,40 @@ class ViolinFingerboardPainter extends CustomPainter {
 
     double stringSpacing = topWidth / 4;
     double firstStringX = startX + (topWidth - stringSpacing * 3) / 2;
-    double pixelPerMm = (size.height - nutY) / 130.0;
+
+    // 調整比例：顯示 150mm 長度
+    double pixelPerMm = (size.height - nutY) / 150.0;
+
+    // 從 Logic 取得要掃描的半音範圍
+    var range = ViolinLogic.getScanRange(currentPosition);
 
     for (int stringIdx = 0; stringIdx < 4; stringIdx++) {
       double x = firstStringX + stringIdx * stringSpacing;
 
       bool isTargetString = false;
       int targetSemitones = -1;
+
+      // 判斷目標音
       if (targetNote != null) {
-        var result = _analyzeFrequency(targetNote!.frequency, stringIdx);
+        var result = ViolinLogic.analyzeFrequency(
+          targetNote!.frequency,
+          stringIdx,
+          currentKey,
+        );
         if (result.note == targetNote) {
           isTargetString = true;
           targetSemitones = result.semitones;
         }
       }
 
+      // 畫弦
       canvas.drawLine(
         Offset(x, nutY),
         Offset(x, size.height),
         isTargetString ? highlightStringPaint : stringPaint,
       );
 
+      // 畫弦名
       TextPainter(
           text: TextSpan(
             text: stringNames[stringIdx],
@@ -288,13 +249,20 @@ class ViolinFingerboardPainter extends CustomPainter {
         ..layout()
         ..paint(canvas, Offset(x - 5, 0));
 
-      for (int s = 0; s <= 8; s++) {
-        double posFreq = openFreqs[stringIdx] * pow(2, s / 12.0);
-        var result = _analyzeFrequency(posFreq, stringIdx);
+      // 根據把位範圍進行掃描
+      for (int s = range.start; s <= range.end; s++) {
+        // 這裡需要 pow 來計算背景圖的頻率，所以需要 dart:math
+        double posFreq = ViolinLogic.openFreqs[stringIdx] * pow(2, s / 12.0);
+        var result = ViolinLogic.analyzeFrequency(
+          posFreq,
+          stringIdx,
+          currentKey,
+        );
 
-        double mm = _calculatePosition(s);
+        double mm = ViolinLogic.calculatePositionMm(s);
         double y = nutY + (mm * pixelPerMm);
 
+        // 畫背景圖鑑
         if (result.isInKey) {
           if (s == 0) {
             canvas.drawCircle(
@@ -310,7 +278,10 @@ class ViolinFingerboardPainter extends CustomPainter {
           }
         }
 
+        // 畫目標高亮
         if (isTargetString && s == targetSemitones) {
+          int fingerNum = ViolinLogic.calcFingerNum(s, currentPosition);
+
           if (s == 0) {
             canvas.drawCircle(
               Offset(x, y),
@@ -322,7 +293,6 @@ class ViolinFingerboardPainter extends CustomPainter {
             );
           } else {
             canvas.drawCircle(Offset(x, y), 9, targetPaint);
-            int fingerNum = _calcFingerNum(s);
             TextPainter(
                 text: TextSpan(
                   text: "$fingerNum",

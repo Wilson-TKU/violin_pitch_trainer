@@ -2,22 +2,33 @@ enum ViolinString { G, D, A, E }
 
 enum PracticeMode { staffToFinger, fingerToStaff, earTraining }
 
+// [NEW] 新增把位定義
+enum ViolinPosition {
+  first("First Pos (第一把位)"),
+  third("Third Pos (第三把位)");
+
+  final String label;
+  const ViolinPosition(this.label);
+}
+
+// ... (MusicalKey 和 ViolinNote 保持不變，可以直接保留你原本的內容)
+// 為確保完整性，若你需要可再次貼上，否則保留原檔即可。
 enum MusicalKey {
-  C_Major("C", 0),
-  G_Major("G", 1),
-  D_Major("D", 2),
-  A_Major("A", 3),
-  E_Major("E", 4),
-  B_Major("B", 5),
-  F_Sharp_Major("F#", 6),
-  C_Sharp_Major("C#", 7),
-  F_Major("F", -1),
-  Bb_Major("Bb", -2),
-  Eb_Major("Eb", -3),
-  Ab_Major("Ab", -4),
-  Db_Major("Db", -5),
-  Gb_Major("Gb", -6),
-  Cb_Major("Cb", -7);
+  C_Major("C Major", 0),
+  G_Major("G Major", 1),
+  D_Major("D Major", 2),
+  A_Major("A Major", 3),
+  E_Major("E Major", 4),
+  B_Major("B Major", 5),
+  F_Sharp_Major("F# Major", 6),
+  C_Sharp_Major("C# Major", 7),
+  F_Major("F Major", -1),
+  Bb_Major("Bb Major", -2),
+  Eb_Major("Eb Major", -3),
+  Ab_Major("Ab Major", -4),
+  Db_Major("Db Major", -5),
+  Gb_Major("Gb Major", -6),
+  Cb_Major("Cb Major", -7);
 
   final String label;
   final int accidentals;
