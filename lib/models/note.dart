@@ -1,6 +1,14 @@
 enum ViolinString { G, D, A, E }
 
-enum PracticeMode { staffToFinger, fingerToStaff, earTraining }
+enum PracticeMode {
+  // --- 原本的三個模式 (保留) ---
+  staffToFinger, // 看譜 -> 找指位
+  fingerToStaff, // 看指位 -> 猜音
+  earTraining, // 聽音 -> 辨音高
+  // --- [NEW] 新增的兩個模式 ---
+  staffToSolfege, // 極速視譜 (Flashcard)
+  positionToSolfege, // 指位 -> 唱名 (Mapping)
+}
 
 // [NEW] 新增把位定義
 enum ViolinPosition {

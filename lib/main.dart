@@ -21,6 +21,13 @@ class ViolinApp extends StatefulWidget {
   State<ViolinApp> createState() => _ViolinAppState();
 }
 
+class QuestionRecord {
+  final String noteName;
+  final bool isCorrect;
+  final int reactionTimeMs;
+  QuestionRecord(this.noteName, this.isCorrect, this.reactionTimeMs);
+}
+
 class _ViolinAppState extends State<ViolinApp> {
   final AudioPlayer _player = AudioPlayer();
   final Random _rng = Random();
@@ -41,23 +48,55 @@ class _ViolinAppState extends State<ViolinApp> {
   ViolinPosition _targetPosition = ViolinPosition.first;
 
   PracticeMode _practiceMode = PracticeMode.staffToFinger;
-
-  // 預設範圍 (稍後會在 initState 自動調整)
   RangeValues _rangePercent = const RangeValues(0.0, 1.0);
+
+  // --- 遊戲化與報表變數 ---
+  int _combo = 0;
+  String? _feedbackMessage;
+  Color _feedbackColor = Colors.transparent;
+
+  Timer? _flashcardTimer;
+  double _timeLimitSetting = 1.5;
+  double _timeLeft = 1.5;
+  Stopwatch _reactionTimer = Stopwatch();
+
+  // [MODIFIED] Session 管理
+  double _questionsPerSessionDouble = 10.0; // 用 double 給 Slider 用
+  int get _questionsPerSession => _questionsPerSessionDouble.round();
+
+  int _questionsDone = 0;
+  List<QuestionRecord> _sessionResults = [];
+  bool _isSessionActive = false;
+  bool _isProcessingInput = false; // [NEW] 防誤觸鎖
 
   @override
   void initState() {
     super.initState();
-    // [NEW] 初始化時，自動將音域設定為當前把位的預設範圍
     _resetRangeToFitPosition();
     _nextNote();
   }
 
-  // [Helper] 計算當前選取把位的「合法百分比範圍」
-  // 回傳 (minPercent, maxPercent)
+  @override
+  void dispose() {
+    _flashcardTimer?.cancel();
+    super.dispose();
+  }
+
+  void _resetSessionState() {
+    _flashcardTimer?.cancel();
+    setState(() {
+      _isSessionActive = false;
+      _questionsDone = 0;
+      _sessionResults.clear();
+      _combo = 0;
+      _feedbackMessage = null;
+      _isAnswerVisible = false;
+      _isProcessingInput = false;
+    });
+  }
+
   ({double min, double max}) _getValidRangeForPositions() {
     if (_selectedPositions.isEmpty) return (min: 0.0, max: 1.0);
-
     int totalNotes = ViolinLogic.totalNotesCount;
     int globalMinIndex = totalNotes;
     int globalMaxIndex = -1;
@@ -67,15 +106,11 @@ class _ViolinAppState extends State<ViolinApp> {
       if (range.minIndex < globalMinIndex) globalMinIndex = range.minIndex;
       if (range.maxIndex > globalMaxIndex) globalMaxIndex = range.maxIndex;
     }
-
     double minP = globalMinIndex / (totalNotes - 1);
     double maxP = globalMaxIndex / (totalNotes - 1);
-
-    // 確保數值在 0~1 之間
     return (min: minP.clamp(0.0, 1.0), max: maxP.clamp(0.0, 1.0));
   }
 
-  // [NEW] 強制將滑桿重置為該把位的最大範圍 (用於切換把位時)
   void _resetRangeToFitPosition() {
     var validRange = _getValidRangeForPositions();
     setState(() {
@@ -83,26 +118,111 @@ class _ViolinAppState extends State<ViolinApp> {
     });
   }
 
+  void _startSession() {
+    _resetSessionState();
+    setState(() {
+      _isSessionActive = true;
+    });
+    _nextNote();
+  }
+
+  void _endSession() {
+    setState(() {
+      _isSessionActive = false;
+      _flashcardTimer?.cancel();
+    });
+    _showReportDialog();
+  }
+
+  void _showReportDialog() {
+    int total = _sessionResults.length;
+    int correct = _sessionResults.where((r) => r.isCorrect).length;
+    int score = total == 0 ? 0 : ((correct / total) * 100).round();
+
+    Map<String, int> missCounts = {};
+    for (var r in _sessionResults) {
+      if (!r.isCorrect) {
+        missCounts[r.noteName] = (missCounts[r.noteName] ?? 0) + 1;
+      }
+    }
+    var sortedMisses = missCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("📝 練習報告 (Report)"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "得分: $score 分",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: score >= 80 ? Colors.green : Colors.orange,
+              ),
+            ),
+            Text("答對: $correct / $total"),
+            const SizedBox(height: 10),
+            const Text(
+              "弱點分析 (最常錯):",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (sortedMisses.isEmpty)
+              const Text("太棒了！全對！", style: TextStyle(color: Colors.green))
+            else
+              ...sortedMisses
+                  .take(3)
+                  .map((e) => Text("• ${e.key} (錯 ${e.value} 次)")),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _startSession();
+            },
+            child: const Text("再來一局"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+            },
+            child: const Text("關閉"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _nextNote() async {
+    _flashcardTimer?.cancel();
     await _player.stop();
+
+    // [MODIFIED] 在這裡判斷是否結束，而不是在 handleAnswer，確保流程正確
+    if (_isSessionActive && _questionsDone >= _questionsPerSession) {
+      _endSession();
+      return;
+    }
+
+    setState(() {
+      _feedbackMessage = null;
+      _feedbackColor = Colors.transparent;
+      _isAnswerVisible = false;
+      _timeLeft = _timeLimitSetting;
+      _isProcessingInput = false; // 解鎖輸入
+    });
+
     if (_selectedKeys.isEmpty || _selectedPositions.isEmpty) return;
 
     List<MusicalKey> availableKeys = _selectedKeys.toList();
     _currentQuestionKey = availableKeys[_rng.nextInt(availableKeys.length)];
 
-    Set<String> validBaseNames = keyNotesMap[_currentQuestionKey] ?? {};
-
     List<ViolinNote> keyValidNotes = allNotes.where((note) {
-      if (_currentQuestionKey == MusicalKey.F_Sharp_Major &&
-          note.baseName == 'F')
-        return true;
-      if (_currentQuestionKey == MusicalKey.C_Sharp_Major &&
-          (note.baseName == 'F' || note.baseName == 'C'))
-        return true;
-      if (_currentQuestionKey == MusicalKey.Cb_Major &&
-          (note.baseName == 'B' || note.baseName == 'E'))
-        return true;
-      return validBaseNames.contains(note.baseName);
+      return ViolinLogic.isNoteInKey(note, _currentQuestionKey);
     }).toList();
 
     List<ViolinNote> positionValidNotes = keyValidNotes.where((note) {
@@ -114,7 +234,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
     if (positionValidNotes.isEmpty) return;
 
-    // 根據滑桿範圍過濾
     int globalTotal = allNotes.length;
     int minIndex = (_rangePercent.start * (globalTotal - 1)).round();
     int maxIndex = (_rangePercent.end * (globalTotal - 1)).round();
@@ -124,9 +243,7 @@ class _ViolinAppState extends State<ViolinApp> {
       return idx >= minIndex && idx <= maxIndex;
     }).toList();
 
-    if (rangeFilteredNotes.isEmpty) {
-      rangeFilteredNotes = positionValidNotes;
-    }
+    if (rangeFilteredNotes.isEmpty) rangeFilteredNotes = positionValidNotes;
 
     final note = rangeFilteredNotes[_rng.nextInt(rangeFilteredNotes.length)];
 
@@ -142,13 +259,12 @@ class _ViolinAppState extends State<ViolinApp> {
       _currentNote = note;
       _targetPosition = chosenPos;
       _isPlaying = true;
-      _isAnswerVisible = false;
     });
 
     double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
     final Uint8List wavBytes = ToneGenerator.generateSineWave(
       frequency: adjustedFrequency,
-      durationMs: 1500,
+      durationMs: 800,
       sampleRate: 44100,
     );
 
@@ -158,10 +274,77 @@ class _ViolinAppState extends State<ViolinApp> {
       debugPrint("Audio Error: $e");
     }
 
-    await Future.delayed(const Duration(milliseconds: 1500));
+    if (_isGameMode()) {
+      _startTimer();
+      _reactionTimer.reset();
+      _reactionTimer.start();
+    }
+
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (mounted && _currentNote == note) {
       setState(() => _isPlaying = false);
     }
+  }
+
+  void _startTimer() {
+    _flashcardTimer = Timer.periodic(const Duration(milliseconds: 100), (
+      timer,
+    ) {
+      setState(() {
+        _timeLeft -= 0.1;
+        if (_timeLeft <= 0) {
+          _handleGameAnswer(false);
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  void _checkSolfegeInput(String inputSolfege) {
+    if (_isProcessingInput || _currentNote == null) return; // [MODIFIED] 防連點
+
+    bool isCorrect = _currentNote!.solfege == inputSolfege;
+    _handleGameAnswer(isCorrect);
+  }
+
+  void _handleGameAnswer(bool isCorrect) {
+    _flashcardTimer?.cancel();
+    _reactionTimer.stop();
+
+    setState(() {
+      _isProcessingInput = true; // [MODIFIED] 鎖定輸入
+    });
+
+    if (_isSessionActive) {
+      _sessionResults.add(
+        QuestionRecord(
+          _currentNote
+                  ?.getDisplayName(_currentQuestionKey)
+                  .replaceAll('\n', ' ') ??
+              "?",
+          isCorrect,
+          _reactionTimer.elapsedMilliseconds,
+        ),
+      );
+      _questionsDone++; // [MODIFIED] 無論對錯，題數+1
+    }
+
+    setState(() {
+      if (isCorrect) {
+        _combo++;
+        _feedbackMessage = "Correct!";
+        _feedbackColor = Colors.green;
+        // 答對快一點
+        Future.delayed(const Duration(milliseconds: 200), _nextNote);
+      } else {
+        _combo = 0;
+        _feedbackMessage = "Wrong! It's ${_currentNote?.solfege}";
+        _feedbackColor = Colors.red;
+        _isAnswerVisible = true;
+        // [MODIFIED] 答錯停留 1.2 秒，然後自動下一題
+        Future.delayed(const Duration(milliseconds: 1200), _nextNote);
+      }
+    });
   }
 
   void _revealAnswer() {
@@ -173,12 +356,21 @@ class _ViolinAppState extends State<ViolinApp> {
   String _getModeName(PracticeMode mode) {
     switch (mode) {
       case PracticeMode.staffToFinger:
-        return "看譜找指位";
+        return "看譜 -> 找指位";
       case PracticeMode.fingerToStaff:
-        return "看指位猜音";
+        return "看指位 -> 猜音";
       case PracticeMode.earTraining:
-        return "聽音辨音高";
+        return "聽音 -> 辨音高";
+      case PracticeMode.staffToSolfege:
+        return "極速視譜 (Flashcard)";
+      case PracticeMode.positionToSolfege:
+        return "指位 -> 唱名";
     }
+  }
+
+  bool _isGameMode() {
+    return _practiceMode == PracticeMode.staffToSolfege ||
+        _practiceMode == PracticeMode.positionToSolfege;
   }
 
   void _showSettings() {
@@ -199,8 +391,6 @@ class _ViolinAppState extends State<ViolinApp> {
             String endStr = eNote
                 .getDisplayName(_selectedKeys.first)
                 .replaceAll('\n', ' ');
-
-            // 取得目前的有效範圍限制
             var validRange = _getValidRangeForPositions();
 
             return Container(
@@ -213,11 +403,11 @@ class _ViolinAppState extends State<ViolinApp> {
                     "設定 (Settings)",
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 15),
 
                   // 1. 練習模式
                   const Text(
-                    "練習模式:",
+                    "1. 練習模式:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   Wrap(
@@ -228,21 +418,25 @@ class _ViolinAppState extends State<ViolinApp> {
                         selected: _practiceMode == mode,
                         onSelected: (val) {
                           if (val) {
+                            _resetSessionState();
                             setModalState(() => _practiceMode = mode);
+                            setState(() {
+                              _practiceMode = mode;
+                            });
                             setState(() => _nextNote());
                           }
                         },
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 15),
 
-                  // 2. 調性選擇
+                  // 2. 調性
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        "選擇調性:",
+                        "2. 調性 (Keys):",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -281,7 +475,6 @@ class _ViolinAppState extends State<ViolinApp> {
                         child: const Text("全選/重置"),
                       ),
                     ),
-                  const SizedBox(height: 5),
 
                   Expanded(
                     child: SingleChildScrollView(
@@ -304,13 +497,12 @@ class _ViolinAppState extends State<ViolinApp> {
                                 child: Column(
                                   children: [
                                     const Text(
-                                      "降記號 (b)",
+                                      "b",
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const SizedBox(height: 5),
                                     _buildKeyButton(
                                       MusicalKey.F_Major,
                                       setModalState,
@@ -347,13 +539,12 @@ class _ViolinAppState extends State<ViolinApp> {
                                 child: Column(
                                   children: [
                                     const Text(
-                                      "升記號 (#)",
+                                      "#",
                                       style: TextStyle(
                                         color: Colors.grey,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const SizedBox(height: 5),
                                     _buildKeyButton(
                                       MusicalKey.G_Major,
                                       setModalState,
@@ -394,12 +585,12 @@ class _ViolinAppState extends State<ViolinApp> {
 
                   const SizedBox(height: 10),
 
-                  // 3. 把位選擇 (多選)
+                  // 3. 把位
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        "把位 (Position):",
+                        "3. 把位:",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -415,13 +606,12 @@ class _ViolinAppState extends State<ViolinApp> {
                                 () => _isPositionMultiSelectMode = val,
                               );
                               setState(() => _isPositionMultiSelectMode = val);
-                              // 切換回單選時，只保留第一個
                               if (!val && _selectedPositions.length > 1) {
                                 setModalState(() {
                                   _selectedPositions = {
                                     _selectedPositions.first,
                                   };
-                                  _resetRangeToFitPosition(); // 自動重置音域
+                                  _resetRangeToFitPosition();
                                 });
                                 setState(() => _nextNote());
                               }
@@ -431,16 +621,15 @@ class _ViolinAppState extends State<ViolinApp> {
                       ),
                     ],
                   ),
-
                   SegmentedButton<ViolinPosition>(
                     segments: const [
                       ButtonSegment(
                         value: ViolinPosition.first,
-                        label: Text("First (第一)"),
+                        label: Text("First"),
                       ),
                       ButtonSegment(
                         value: ViolinPosition.third,
-                        label: Text("Third (第三)"),
+                        label: Text("Third"),
                       ),
                     ],
                     selected: _selectedPositions,
@@ -451,12 +640,9 @@ class _ViolinAppState extends State<ViolinApp> {
                           if (newValues.isEmpty) return;
                           _selectedPositions = newValues;
                         } else {
-                          // 單選邏輯：強制替換
-                          if (newValues.isNotEmpty) {
+                          if (newValues.isNotEmpty)
                             _selectedPositions = newValues;
-                          }
                         }
-                        // [NEW] 當把位改變時，自動把音域重置到該把位最大範圍
                         _resetRangeToFitPosition();
                       });
                       setState(() => _nextNote());
@@ -469,7 +655,7 @@ class _ViolinAppState extends State<ViolinApp> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        "音域範圍:",
+                        "4. 音域:",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -488,21 +674,15 @@ class _ViolinAppState extends State<ViolinApp> {
                     values: _rangePercent,
                     min: 0.0,
                     max: 1.0,
-                    divisions: 40, // 增加刻度讓調整更細
+                    divisions: 40,
                     onChanged: (RangeValues values) {
-                      // [NEW] 限制拖曳範圍：不能超出當前選定把位的物理限制
                       double clampedStart = values.start;
                       double clampedEnd = values.end;
-
-                      // 限制下限
                       if (clampedStart < validRange.min)
                         clampedStart = validRange.min;
-                      // 限制上限
                       if (clampedEnd > validRange.max)
                         clampedEnd = validRange.max;
-                      // 防止交錯
                       if (clampedStart > clampedEnd) clampedStart = clampedEnd;
-
                       setModalState(
                         () => _rangePercent = RangeValues(
                           clampedStart,
@@ -513,17 +693,49 @@ class _ViolinAppState extends State<ViolinApp> {
                     },
                   ),
 
+                  // [NEW] 5. 每回合題數設定
                   const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "5. 每回合題數:",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        "$_questionsPerSession 題",
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: _questionsPerSessionDouble,
+                    min: 10,
+                    max: 100,
+                    divisions: 9, // 10, 20, ... 100
+                    label: "$_questionsPerSession",
+                    onChanged: (val) {
+                      setModalState(() => _questionsPerSessionDouble = val);
+                      setState(() {});
+                    },
+                  ),
 
-                  // 5. 基準音
+                  // 6. 基準音
+                  const SizedBox(height: 5),
                   const Text(
-                    "基準音:",
+                    "6. 基準音:",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   SegmentedButton<double>(
                     segments: const [
-                      ButtonSegment(value: 440.0, label: Text("440")),
-                      ButtonSegment(value: 442.0, label: Text("442")),
+                      ButtonSegment(value: 440.0, label: Text("440Hz")),
+                      ButtonSegment(value: 442.0, label: Text("442Hz")),
                     ],
                     selected: {_referencePitch},
                     onSelectionChanged: (newVal) {
@@ -567,23 +779,15 @@ class _ViolinAppState extends State<ViolinApp> {
         setState(() => _nextNote());
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-        height: 55,
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+        height: 45,
         decoration: BoxDecoration(
           color: isSelected ? Colors.blue[50] : Colors.white,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? Colors.blue : Colors.grey[300]!,
             width: isSelected ? 2 : 1,
           ),
-          boxShadow: [
-            if (!isSelected)
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
-          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -592,13 +796,12 @@ class _ViolinAppState extends State<ViolinApp> {
               key.label,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
                 color: isSelected ? Colors.blue[800] : Colors.black87,
               ),
             ),
-            const SizedBox(height: 2),
             CustomPaint(
-              size: const Size(60, 20),
+              size: const Size(50, 15),
               painter: KeySignaturePainter(accidentals: key.accidentals),
             ),
           ],
@@ -607,31 +810,122 @@ class _ViolinAppState extends State<ViolinApp> {
     );
   }
 
+  Widget _buildSolfegeKeypad() {
+    final accidentals = ['Do#', 'Re#', 'Fa#', 'Sol#', 'La#'];
+    final naturals = ['Do', 'Re', 'Mi', 'Fa', 'Sol', 'La', 'Si'];
+
+    return Column(
+      children: [
+        // 上排：黑鍵
+        Expanded(
+          flex: 4,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: accidentals
+                .map(
+                  (note) => Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[800],
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        onPressed: () => _checkSolfegeInput(note),
+                        child: Text(note, style: const TextStyle(fontSize: 16)),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // 下排：白鍵
+        Expanded(
+          flex: 6,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: naturals
+                .map(
+                  (note) => Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: EdgeInsets.zero,
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            side: BorderSide(color: Colors.grey[300]!),
+                          ),
+                        ),
+                        onPressed: () => _checkSolfegeInput(note),
+                        child: Text(
+                          note,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool showStaff = false;
-    bool showFingerboardAnswer = false;
+    bool showFingerboardHint = false;
+    bool showStaff = true;
 
     switch (_practiceMode) {
       case PracticeMode.staffToFinger:
         showStaff = true;
-        showFingerboardAnswer = _isAnswerVisible;
+        showFingerboardHint = !_isAnswerVisible;
         break;
       case PracticeMode.fingerToStaff:
         showStaff = _isAnswerVisible;
-        showFingerboardAnswer = true;
+        showFingerboardHint = false;
         break;
       case PracticeMode.earTraining:
         showStaff = _isAnswerVisible;
-        showFingerboardAnswer = _isAnswerVisible;
+        showFingerboardHint = !_isAnswerVisible;
+        break;
+      case PracticeMode.staffToSolfege:
+        showStaff = true;
+        showFingerboardHint = true;
+        break;
+      case PracticeMode.positionToSolfege:
+        showStaff = false;
+        showFingerboardHint = false;
         break;
     }
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Violin Trainer"),
+        title: _isSessionActive
+            ? Text("Session: $_questionsDone / $_questionsPerSession")
+            : Text("Violin Trainer"),
         actions: [
+          if (!_isSessionActive && _isGameMode())
+            TextButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: const Text("Start Session"),
+              onPressed: _startSession,
+            ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showSettings,
@@ -652,26 +946,21 @@ class _ViolinAppState extends State<ViolinApp> {
                   CustomPaint(
                     size: Size.infinite,
                     painter: ViolinFingerboardPainter(
-                      targetNote: showFingerboardAnswer ? _currentNote : null,
+                      targetNote:
+                          (_practiceMode == PracticeMode.fingerToStaff ||
+                              _practiceMode == PracticeMode.positionToSolfege ||
+                              _isAnswerVisible)
+                          ? _currentNote
+                          : null,
                       currentKey: _currentQuestionKey,
                       currentPosition: _targetPosition,
                     ),
                   ),
-                  if (_practiceMode == PracticeMode.staffToFinger &&
-                      !_isAnswerVisible)
+                  if (showFingerboardHint)
                     const Center(
                       child: Text(
                         "?",
                         style: TextStyle(fontSize: 80, color: Colors.white24),
-                      ),
-                    ),
-                  if (_practiceMode == PracticeMode.earTraining &&
-                      !_isAnswerVisible)
-                    const Center(
-                      child: Icon(
-                        Icons.visibility_off,
-                        size: 60,
-                        color: Colors.white24,
                       ),
                     ),
                 ],
@@ -686,6 +975,36 @@ class _ViolinAppState extends State<ViolinApp> {
             flex: 65,
             child: Column(
               children: [
+                // 1. 頂部控制區
+                if (_isGameMode())
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    color: Colors.grey[100],
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer, size: 16),
+                        const SizedBox(width: 5),
+                        Text("${_timeLimitSetting}s"),
+                        Expanded(
+                          child: Slider(
+                            value: _timeLimitSetting,
+                            min: 0.5,
+                            max: 5.0,
+                            divisions: 9,
+                            label: "${_timeLimitSetting}s",
+                            onChanged: (val) {
+                              setState(() => _timeLimitSetting = val);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // 2. 五線譜區域
                 Expanded(
                   flex: 4,
                   child: Container(
@@ -694,6 +1013,18 @@ class _ViolinAppState extends State<ViolinApp> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
+                        if (_practiceMode == PracticeMode.staffToSolfege)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: LinearProgressIndicator(
+                              value: _timeLeft / _timeLimitSetting,
+                              color: _timeLeft > 0.5 ? Colors.blue : Colors.red,
+                              minHeight: 4,
+                            ),
+                          ),
+
                         CustomPaint(
                           size: Size.infinite,
                           painter: StaffPainter(
@@ -709,6 +1040,26 @@ class _ViolinAppState extends State<ViolinApp> {
                             size: 50,
                             color: Colors.grey,
                           ),
+
+                        if (_feedbackMessage != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _feedbackColor.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _feedbackMessage!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -716,102 +1067,123 @@ class _ViolinAppState extends State<ViolinApp> {
 
                 const Divider(height: 1, thickness: 1),
 
+                // 3. 操作區域
                 Expanded(
                   flex: 6,
                   child: Container(
                     color: Colors.grey[50],
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label} (${_targetPosition.label.split(' ')[0]})",
+                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label}",
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             color: Colors.grey[600],
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
 
-                        if (_isAnswerVisible) ...[
-                          Text(
-                            _currentNote
-                                    ?.getDisplayName(_currentQuestionKey)
-                                    .split('\n')[0] ??
-                                "",
-                            style: const TextStyle(
-                              fontSize: 60,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          Text(
-                            _currentNote?.solfege ?? "",
-                            style: const TextStyle(
-                              fontSize: 30,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ] else
-                          const Text(
-                            "?",
-                            style: TextStyle(fontSize: 80, color: Colors.grey),
-                          ),
+                        if (_isGameMode()) ...[
+                          Expanded(child: _buildSolfegeKeypad()),
 
-                        const Spacer(),
-
-                        IconButton(
-                          onPressed: () async {
-                            if (_currentNote != null) {
-                              double adjFreq =
-                                  _currentNote!.frequency *
-                                  (_referencePitch / 440.0);
-                              final wavBytes = ToneGenerator.generateSineWave(
-                                frequency: adjFreq,
-                                durationMs: 1000,
-                                sampleRate: 44100,
-                              );
-                              await _player.stop();
-                              await _player.play(BytesSource(wavBytes));
-                            }
-                          },
-                          icon: const Icon(Icons.volume_up, size: 40),
-                          color: Colors.grey[700],
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        SizedBox(
-                          width: double.infinity,
-                          height: 70,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (_isAnswerVisible) {
-                                _nextNote();
-                              } else {
-                                _revealAnswer();
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isAnswerVisible
-                                  ? Colors.blue
-                                  : Colors.orange,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                          if (_isAnswerVisible)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 40,
+                              child: ElevatedButton(
+                                onPressed: _nextNote,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                ),
+                                child: const Text(
+                                  "Next Note",
+                                  style: TextStyle(color: Colors.white),
+                                ),
                               ),
                             ),
-                            child: Text(
-                              _isAnswerVisible ? "Next" : "Answer",
+                        ] else ...[
+                          if (_isAnswerVisible) ...[
+                            Text(
+                              _currentNote
+                                      ?.getDisplayName(_currentQuestionKey)
+                                      .split('\n')[0] ??
+                                  "",
+                              style: const TextStyle(
+                                fontSize: 50,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            Text(
+                              _currentNote?.solfege ?? "",
                               style: const TextStyle(
                                 fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ] else
+                            const Text(
+                              "?",
+                              style: TextStyle(
+                                fontSize: 70,
+                                color: Colors.grey,
+                              ),
+                            ),
+
+                          const Spacer(),
+
+                          IconButton(
+                            onPressed: () async {
+                              if (_currentNote != null) {
+                                double adjFreq =
+                                    _currentNote!.frequency *
+                                    (_referencePitch / 440.0);
+                                final wavBytes = ToneGenerator.generateSineWave(
+                                  frequency: adjFreq,
+                                  durationMs: 1000,
+                                  sampleRate: 44100,
+                                );
+                                await _player.stop();
+                                await _player.play(BytesSource(wavBytes));
+                              }
+                            },
+                            icon: const Icon(Icons.volume_up, size: 40),
+                            color: Colors.grey[700],
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 60,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                if (_isAnswerVisible) {
+                                  _nextNote();
+                                } else {
+                                  _revealAnswer();
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isAnswerVisible
+                                    ? Colors.blue
+                                    : Colors.orange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Text(
+                                _isAnswerVisible ? "Next" : "Answer",
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                        ],
                       ],
                     ),
                   ),

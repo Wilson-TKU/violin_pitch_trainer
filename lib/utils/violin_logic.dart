@@ -6,7 +6,6 @@ class ViolinLogic {
   static const double openStringLength = 325.0;
   static const List<double> openFreqs = [196.00, 293.66, 440.00, 659.25];
 
-  // [NEW] 方便取得總音符數量
   static int get totalNotesCount => allNotes.length;
 
   static double calculatePositionMm(int semitonesFromOpen) {
@@ -28,23 +27,73 @@ class ViolinLogic {
   ) {
     switch (pos) {
       case ViolinPosition.first:
-        return (minIndex: 0, maxIndex: 28); // G3 ~ B5
+        return (minIndex: 0, maxIndex: 28);
       case ViolinPosition.third:
-        return (minIndex: 5, maxIndex: 37); // C4 ~ E6
+        return (minIndex: 5, maxIndex: 37);
     }
   }
 
   static bool isNoteInPosition(ViolinNote note, ViolinPosition pos) {
     int index = allNotes.indexOf(note);
     if (index == -1) return false;
-
     var range = getPositionIndexRange(pos);
     return index >= range.minIndex && index <= range.maxIndex;
   }
 
+  // [NEW] 檢查音符是否屬於該調性 (處理同音異名 A# == Bb)
+  static bool isNoteInKey(ViolinNote note, MusicalKey key) {
+    Set<String> validNames = keyNotesMap[key] ?? {};
+
+    // 直接比對
+    if (validNames.contains(note.baseName)) return true;
+
+    // 處理同音異名 (Enharmonics)
+    // 資料庫存的是升記號為主 (A#, C#)，但調性可能要求降記號 (Bb, Db)
+    String enharmonic = _getEnharmonic(note.baseName);
+    if (validNames.contains(enharmonic)) return true;
+
+    // 特殊處理 F# Major 的 E# (即 F)
+    if (key == MusicalKey.F_Sharp_Major && note.baseName == 'F') return true;
+    if (key == MusicalKey.C_Sharp_Major &&
+        (note.baseName == 'F' || note.baseName == 'C'))
+      return true;
+    if (key == MusicalKey.Cb_Major &&
+        (note.baseName == 'B' || note.baseName == 'E'))
+      return true;
+
+    return false;
+  }
+
+  static String _getEnharmonic(String base) {
+    switch (base) {
+      case 'A#':
+        return 'Bb';
+      case 'C#':
+        return 'Db';
+      case 'D#':
+        return 'Eb';
+      case 'F#':
+        return 'Gb';
+      case 'G#':
+        return 'Ab';
+      // 反向
+      case 'Bb':
+        return 'A#';
+      case 'Db':
+        return 'C#';
+      case 'Eb':
+        return 'D#';
+      case 'Gb':
+        return 'F#';
+      case 'Ab':
+        return 'G#';
+      default:
+        return base;
+    }
+  }
+
   static int calcFingerNum(int semitones, ViolinPosition pos) {
     if (semitones == 0) return 0;
-
     if (pos == ViolinPosition.first) {
       if (semitones <= 2) return 1;
       if (semitones <= 4) return 2;
@@ -84,21 +133,8 @@ class ViolinLogic {
     if (foundNote == null)
       return (note: null, isInKey: false, semitones: semitones);
 
-    bool isInKey = false;
-    Set<String> validBaseNames = keyNotesMap[currentKey] ?? {};
-
-    if (validBaseNames.contains(foundNote.baseName)) {
-      isInKey = true;
-    } else {
-      if (currentKey == MusicalKey.F_Sharp_Major && foundNote.baseName == 'F')
-        isInKey = true;
-      if (currentKey == MusicalKey.C_Sharp_Major &&
-          (foundNote.baseName == 'F' || foundNote.baseName == 'C'))
-        isInKey = true;
-      if (currentKey == MusicalKey.Cb_Major &&
-          (foundNote.baseName == 'B' || foundNote.baseName == 'E'))
-        isInKey = true;
-    }
+    // 使用新的嚴格檢查
+    bool isInKey = isNoteInKey(foundNote, currentKey);
 
     return (note: foundNote, isInKey: isInKey, semitones: semitones);
   }
