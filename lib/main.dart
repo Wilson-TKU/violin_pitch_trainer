@@ -28,7 +28,6 @@ class QuestionRecord {
   QuestionRecord(this.noteName, this.isCorrect, this.reactionTimeMs);
 }
 
-// [MODIFIED] 加入 WidgetsBindingObserver 以監聽 App 背景狀態
 class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   final AudioPlayer _player = AudioPlayer();
   final Random _rng = Random();
@@ -73,38 +72,46 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   // [NEW] 靜音開關
   bool _isMuted = false;
 
+  // [NEW] 應用程式前台狀態追蹤 (關鍵修正)
+  bool _isAppInForeground = true;
+
   @override
   void initState() {
     super.initState();
-    // [NEW] 註冊生命週期監聽
     WidgetsBinding.instance.addObserver(this);
-
     _resetRangeToFitPosition();
     _nextNote();
   }
 
   @override
   void dispose() {
-    // [NEW] 移除監聽與清理資源
     WidgetsBinding.instance.removeObserver(this);
     _flashcardTimer?.cancel();
-    _player.dispose(); // 釋放音頻資源
+    _player.dispose();
     super.dispose();
   }
 
-  // [NEW] 監聽 App 狀態變化 (背景/前台)
+  // [MODIFIED] 強化生命週期管理
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.resumed) {
+      // 回到前台
+      _isAppInForeground = true;
+
+      // 如果是在 Session 中，且倒數計時器被暫停了，這裡可以選擇是否自動恢復
+      // 目前策略：保持暫停，讓使用者看到當前畫面，避免一回來就突然嚇到
+    } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      // 當 App 進入背景或不活躍時
-      _player.stop(); // 停止聲音
-      _flashcardTimer?.cancel(); // 停止倒數
+      // 進入背景
+      _isAppInForeground = false;
+
+      // 強制停止所有活動
+      _player.stop();
+      _flashcardTimer?.cancel();
+      _reactionTimer.stop();
+
       setState(() {
         _isPlaying = false;
-        // 如果正在倒數，暫停或是直接讓它保持原狀，等待回到前台
-        // 這裡選擇簡單處理：取消計時器，使用者回來可能需要手動下一步或是重置
-        // 為了避免作弊，這裡不做太多複雜恢復，僅確保不耗資源不發聲
       });
     }
   }
@@ -226,6 +233,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   }
 
   Future<void> _nextNote() async {
+    // [FIX] 關鍵修正：如果 APP 在背景，直接終止執行，防止聲音或計時器啟動
+    if (!_isAppInForeground) return;
+
     _flashcardTimer?.cancel();
     await _player.stop();
 
@@ -287,8 +297,13 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
       _isPlaying = true;
     });
 
-    // [MODIFIED] 靜音檢查
     if (!_isMuted) {
+      // 再次檢查 (避免 async gap 期間切到背景)
+      if (!_isAppInForeground) {
+        setState(() => _isPlaying = false);
+        return;
+      }
+
       double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
       final Uint8List wavBytes = ToneGenerator.generateSineWave(
         frequency: adjustedFrequency,
@@ -319,6 +334,12 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     _flashcardTimer = Timer.periodic(const Duration(milliseconds: 100), (
       timer,
     ) {
+      // 安全檢查
+      if (!_isAppInForeground) {
+        timer.cancel();
+        return;
+      }
+
       setState(() {
         _timeLeft -= 0.1;
         if (_timeLeft <= 0) {
@@ -862,7 +883,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                         ),
                         onPressed: () => _checkSolfegeInput(note),
-                        // [MODIFIED] 使用 FittedBox 解決 Sol# 換行問題
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
@@ -955,7 +975,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
             ? Text("Session: $_questionsDone / $_questionsPerSession")
             : Text("Violin Trainer"),
         actions: [
-          // [NEW] 靜音按鈕
           IconButton(
             icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
             onPressed: () {
@@ -1134,13 +1153,12 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                         if (_isGameMode()) ...[
                           Expanded(child: _buildSolfegeKeypad()),
 
-                          // [MODIFIED] 固定高度區域，解決按鈕跳動問題
+                          // 固定高度區域
                           SizedBox(
-                            height: 60, // 預留固定高度
+                            height: 60,
                             width: double.infinity,
                             child: _isAnswerVisible
                                 ? Center(
-                                    // 只有需要時顯示按鈕
                                     child: SizedBox(
                                       width: double.infinity,
                                       height: 45,
@@ -1156,7 +1174,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                       ),
                                     ),
                                   )
-                                : const SizedBox(), // 不需要時留白，撐住高度
+                                : const SizedBox(),
                           ),
                         ] else ...[
                           // --- 舊模式 UI ---
@@ -1193,7 +1211,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           IconButton(
                             onPressed: () async {
                               if (_currentNote != null) {
-                                // [MODIFIED] 靜音檢查
                                 if (_isMuted) return;
 
                                 double adjFreq =
