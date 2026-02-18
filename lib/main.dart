@@ -28,7 +28,8 @@ class QuestionRecord {
   QuestionRecord(this.noteName, this.isCorrect, this.reactionTimeMs);
 }
 
-class _ViolinAppState extends State<ViolinApp> {
+// [MODIFIED] 加入 WidgetsBindingObserver 以監聽 App 背景狀態
+class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   final AudioPlayer _player = AudioPlayer();
   final Random _rng = Random();
 
@@ -69,17 +70,43 @@ class _ViolinAppState extends State<ViolinApp> {
   bool _isSessionActive = false;
   bool _isProcessingInput = false;
 
+  // [NEW] 靜音開關
+  bool _isMuted = false;
+
   @override
   void initState() {
     super.initState();
+    // [NEW] 註冊生命週期監聽
+    WidgetsBinding.instance.addObserver(this);
+
     _resetRangeToFitPosition();
     _nextNote();
   }
 
   @override
   void dispose() {
+    // [NEW] 移除監聽與清理資源
+    WidgetsBinding.instance.removeObserver(this);
     _flashcardTimer?.cancel();
+    _player.dispose(); // 釋放音頻資源
     super.dispose();
+  }
+
+  // [NEW] 監聽 App 狀態變化 (背景/前台)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // 當 App 進入背景或不活躍時
+      _player.stop(); // 停止聲音
+      _flashcardTimer?.cancel(); // 停止倒數
+      setState(() {
+        _isPlaying = false;
+        // 如果正在倒數，暫停或是直接讓它保持原狀，等待回到前台
+        // 這裡選擇簡單處理：取消計時器，使用者回來可能需要手動下一步或是重置
+        // 為了避免作弊，這裡不做太多複雜恢復，僅確保不耗資源不發聲
+      });
+    }
   }
 
   void _resetSessionState() {
@@ -260,17 +287,20 @@ class _ViolinAppState extends State<ViolinApp> {
       _isPlaying = true;
     });
 
-    double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
-    final Uint8List wavBytes = ToneGenerator.generateSineWave(
-      frequency: adjustedFrequency,
-      durationMs: 800,
-      sampleRate: 44100,
-    );
+    // [MODIFIED] 靜音檢查
+    if (!_isMuted) {
+      double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
+      final Uint8List wavBytes = ToneGenerator.generateSineWave(
+        frequency: adjustedFrequency,
+        durationMs: 800,
+        sampleRate: 44100,
+      );
 
-    try {
-      await _player.play(BytesSource(wavBytes));
-    } catch (e) {
-      debugPrint("Audio Error: $e");
+      try {
+        await _player.play(BytesSource(wavBytes));
+      } catch (e) {
+        debugPrint("Audio Error: $e");
+      }
     }
 
     if (_isGameMode()) {
@@ -813,7 +843,6 @@ class _ViolinAppState extends State<ViolinApp> {
 
     return Column(
       children: [
-        // 上排：黑鍵
         Expanded(
           flex: 4,
           child: Row(
@@ -833,7 +862,14 @@ class _ViolinAppState extends State<ViolinApp> {
                           ),
                         ),
                         onPressed: () => _checkSolfegeInput(note),
-                        child: Text(note, style: const TextStyle(fontSize: 16)),
+                        // [MODIFIED] 使用 FittedBox 解決 Sol# 換行問題
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            note,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -842,7 +878,6 @@ class _ViolinAppState extends State<ViolinApp> {
           ),
         ),
         const SizedBox(height: 8),
-        // 下排：白鍵
         Expanded(
           flex: 6,
           child: Row(
@@ -864,11 +899,14 @@ class _ViolinAppState extends State<ViolinApp> {
                           ),
                         ),
                         onPressed: () => _checkSolfegeInput(note),
-                        child: Text(
-                          note,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            note,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -917,6 +955,15 @@ class _ViolinAppState extends State<ViolinApp> {
             ? Text("Session: $_questionsDone / $_questionsPerSession")
             : Text("Violin Trainer"),
         actions: [
+          // [NEW] 靜音按鈕
+          IconButton(
+            icon: Icon(_isMuted ? Icons.volume_off : Icons.volume_up),
+            onPressed: () {
+              setState(() {
+                _isMuted = !_isMuted;
+              });
+            },
+          ),
           if (!_isSessionActive && _isGameMode())
             TextButton.icon(
               icon: const Icon(Icons.play_arrow),
@@ -1010,7 +1057,6 @@ class _ViolinAppState extends State<ViolinApp> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // [MODIFIED] 只要是遊戲模式就顯示倒數條，不限於 Flashcard
                         if (_isGameMode())
                           Positioned(
                             top: 0,
@@ -1084,25 +1130,36 @@ class _ViolinAppState extends State<ViolinApp> {
                         ),
                         const SizedBox(height: 10),
 
+                        // --- 核心分歧點 ---
                         if (_isGameMode()) ...[
                           Expanded(child: _buildSolfegeKeypad()),
 
-                          if (_isAnswerVisible)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 40,
-                              child: ElevatedButton(
-                                onPressed: _nextNote,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                ),
-                                child: const Text(
-                                  "Next Note",
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ),
+                          // [MODIFIED] 固定高度區域，解決按鈕跳動問題
+                          SizedBox(
+                            height: 60, // 預留固定高度
+                            width: double.infinity,
+                            child: _isAnswerVisible
+                                ? Center(
+                                    // 只有需要時顯示按鈕
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: 45,
+                                      child: ElevatedButton(
+                                        onPressed: _nextNote,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue,
+                                        ),
+                                        child: const Text(
+                                          "Next Note",
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox(), // 不需要時留白，撐住高度
+                          ),
                         ] else ...[
+                          // --- 舊模式 UI ---
                           if (_isAnswerVisible) ...[
                             Text(
                               _currentNote
@@ -1136,6 +1193,9 @@ class _ViolinAppState extends State<ViolinApp> {
                           IconButton(
                             onPressed: () async {
                               if (_currentNote != null) {
+                                // [MODIFIED] 靜音檢查
+                                if (_isMuted) return;
+
                                 double adjFreq =
                                     _currentNote!.frequency *
                                     (_referencePitch / 440.0);
