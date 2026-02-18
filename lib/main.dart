@@ -60,14 +60,14 @@ class _ViolinAppState extends State<ViolinApp> {
   double _timeLeft = 1.5;
   Stopwatch _reactionTimer = Stopwatch();
 
-  // [MODIFIED] Session 管理
-  double _questionsPerSessionDouble = 10.0; // 用 double 給 Slider 用
+  // Session 管理
+  double _questionsPerSessionDouble = 10.0;
   int get _questionsPerSession => _questionsPerSessionDouble.round();
 
   int _questionsDone = 0;
   List<QuestionRecord> _sessionResults = [];
   bool _isSessionActive = false;
-  bool _isProcessingInput = false; // [NEW] 防誤觸鎖
+  bool _isProcessingInput = false;
 
   @override
   void initState() {
@@ -202,7 +202,6 @@ class _ViolinAppState extends State<ViolinApp> {
     _flashcardTimer?.cancel();
     await _player.stop();
 
-    // [MODIFIED] 在這裡判斷是否結束，而不是在 handleAnswer，確保流程正確
     if (_isSessionActive && _questionsDone >= _questionsPerSession) {
       _endSession();
       return;
@@ -213,7 +212,7 @@ class _ViolinAppState extends State<ViolinApp> {
       _feedbackColor = Colors.transparent;
       _isAnswerVisible = false;
       _timeLeft = _timeLimitSetting;
-      _isProcessingInput = false; // 解鎖輸入
+      _isProcessingInput = false;
     });
 
     if (_selectedKeys.isEmpty || _selectedPositions.isEmpty) return;
@@ -301,7 +300,7 @@ class _ViolinAppState extends State<ViolinApp> {
   }
 
   void _checkSolfegeInput(String inputSolfege) {
-    if (_isProcessingInput || _currentNote == null) return; // [MODIFIED] 防連點
+    if (_isProcessingInput || _currentNote == null) return;
 
     bool isCorrect = _currentNote!.solfege == inputSolfege;
     _handleGameAnswer(isCorrect);
@@ -312,7 +311,7 @@ class _ViolinAppState extends State<ViolinApp> {
     _reactionTimer.stop();
 
     setState(() {
-      _isProcessingInput = true; // [MODIFIED] 鎖定輸入
+      _isProcessingInput = true;
     });
 
     if (_isSessionActive) {
@@ -326,7 +325,7 @@ class _ViolinAppState extends State<ViolinApp> {
           _reactionTimer.elapsedMilliseconds,
         ),
       );
-      _questionsDone++; // [MODIFIED] 無論對錯，題數+1
+      _questionsDone++;
     }
 
     setState(() {
@@ -334,14 +333,12 @@ class _ViolinAppState extends State<ViolinApp> {
         _combo++;
         _feedbackMessage = "Correct!";
         _feedbackColor = Colors.green;
-        // 答對快一點
         Future.delayed(const Duration(milliseconds: 200), _nextNote);
       } else {
         _combo = 0;
         _feedbackMessage = "Wrong! It's ${_currentNote?.solfege}";
         _feedbackColor = Colors.red;
         _isAnswerVisible = true;
-        // [MODIFIED] 答錯停留 1.2 秒，然後自動下一題
         Future.delayed(const Duration(milliseconds: 1200), _nextNote);
       }
     });
@@ -693,7 +690,7 @@ class _ViolinAppState extends State<ViolinApp> {
                     },
                   ),
 
-                  // [NEW] 5. 每回合題數設定
+                  // 5. 每回合題數
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -718,7 +715,7 @@ class _ViolinAppState extends State<ViolinApp> {
                     value: _questionsPerSessionDouble,
                     min: 10,
                     max: 100,
-                    divisions: 9, // 10, 20, ... 100
+                    divisions: 9,
                     label: "$_questionsPerSession",
                     onChanged: (val) {
                       setModalState(() => _questionsPerSessionDouble = val);
@@ -1013,7 +1010,8 @@ class _ViolinAppState extends State<ViolinApp> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        if (_practiceMode == PracticeMode.staffToSolfege)
+                        // [MODIFIED] 只要是遊戲模式就顯示倒數條，不限於 Flashcard
+                        if (_isGameMode())
                           Positioned(
                             top: 0,
                             left: 0,
