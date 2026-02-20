@@ -87,11 +87,15 @@ class StaffPainter extends CustomPainter {
   final int? noteIndex;
   final MusicalKey keySignature;
   final bool isTargetOpenString;
+  final bool showClef;
+  final bool showKeySignature;
 
   StaffPainter({
     this.noteIndex,
     required this.keySignature,
     this.isTargetOpenString = false,
+    this.showClef = true,
+    this.showKeySignature = true,
   });
 
   // 絕對統一座標系
@@ -129,33 +133,39 @@ class StaffPainter extends CustomPainter {
     }
 
     // 2. 畫高音譜記號 (G-Clef)
-    const double clefFontSize = 88.0;
-    TextPainter clefPainter = TextPainter(
-      text: const TextSpan(
-        text: '\u{1D11E}',
-        style: TextStyle(
-          fontSize: clefFontSize,
-          color: Colors.black,
-          fontFamilyFallback: musicFontFallbacks, // 套用音樂字型優先
+    double clefWidth = 0;
+    if (showClef) {
+      const double clefFontSize = 88.0;
+      TextPainter clefPainter = TextPainter(
+        text: const TextSpan(
+          text: '\u{1D11E}',
+          style: TextStyle(
+            fontSize: clefFontSize,
+            color: Colors.black,
+            fontFamilyFallback: musicFontFallbacks, // 套用音樂字型優先
+          ),
         ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    clefPainter.layout();
+        textDirection: TextDirection.ltr,
+      );
+      clefPainter.layout();
+      clefWidth = clefPainter.width;
 
-    double gLineY = _getY(3, centerY, spaceHeight);
-    // 針對不同字型的通用對齊修正
-    clefPainter.paint(
-      canvas,
-      Offset(clefLeftPadding, gLineY - clefPainter.height * 0.62),
-    );
+      double gLineY = _getY(3, centerY, spaceHeight);
+      // 針對不同字型的通用對齊修正
+      clefPainter.paint(
+        canvas,
+        Offset(clefLeftPadding, gLineY - clefPainter.height * 0.62),
+      );
+    }
 
     // 3. 畫調號 (升降記號) 並計算總寬度
-    double currentKeyX = clefLeftPadding + clefPainter.width + clefToKeySpacing;
+    double currentKeyX = showClef
+        ? (clefLeftPadding + clefWidth + clefToKeySpacing)
+        : clefLeftPadding;
     double keySignatureEndX = currentKeyX;
 
     int accCount = keySignature.accidentals;
-    if (accCount != 0) {
+    if (showKeySignature && accCount != 0) {
       bool isSharp = accCount > 0;
       int count = accCount.abs();
 
@@ -183,6 +193,8 @@ class StaffPainter extends CustomPainter {
         currentKeyX += accSpacing;
       }
       keySignatureEndX = currentKeyX - accSpacing + 12.0;
+    } else {
+      keySignatureEndX = showClef ? currentKeyX : staffLeftPadding;
     }
 
     // 4. 畫目標音符 (動態計算位置)

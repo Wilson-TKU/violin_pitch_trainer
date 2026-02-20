@@ -70,6 +70,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   bool _isSessionActive = false;
   bool _isProcessingInput = false;
 
+  // [NEW] Staff visibility controls
+  bool _showClef = true;
+  bool _showKeySignature = true;
+
   // [NEW] 靜音開關
   bool _isMuted = false;
 
@@ -1225,15 +1229,18 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             ),
                           ),
 
+                        // Scrollable Staff
                         CustomPaint(
                           size: Size.infinite,
                           painter: StaffPainter(
-                            noteIndex: showStaff
-                                ? _currentNote?.staffIndex
-                                : null,
+                            noteIndex:
+                                showStaff ? _currentNote?.staffIndex : null,
                             keySignature: _currentQuestionKey,
+                            showClef: _showClef,
+                            showKeySignature: _showKeySignature,
                           ),
                         ),
+
                         if (!showStaff)
                           const Icon(
                             Icons.visibility_off,
@@ -1241,6 +1248,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             color: Colors.grey,
                           ),
 
+                        // Feedback message overlay
                         if (_feedbackMessage != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1260,6 +1268,50 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+
+                        // [NEW] Overlay Toggle Buttons
+                        Positioned(
+                          top: 5,
+                          right: 5,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _showClef
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                    color: Colors.grey[600],
+                                  ),
+                                  tooltip: "顯示/隱藏譜號",
+                                  onPressed: () {
+                                    setState(() {
+                                      _showClef = !_showClef;
+                                    });
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    _showKeySignature
+                                        ? Icons.vpn_key
+                                        : Icons.vpn_key_off,
+                                    color: Colors.grey[600],
+                                  ),
+                                  tooltip: "顯示/隱藏調號",
+                                  onPressed: () {
+                                    setState(() {
+                                      _showKeySignature = !_showKeySignature;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
