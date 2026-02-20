@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../utils/violin_logic.dart';
 
-// --- 迷你調號繪圖器 ---
+// --- 迷你調號繪圖器 (維持穩定版邏輯) ---
 class KeySignaturePainter extends CustomPainter {
   final int accidentals;
   KeySignaturePainter({required this.accidentals});
@@ -39,7 +39,7 @@ class KeySignaturePainter extends CustomPainter {
       double y = centerY + 2 * spaceHeight * 2 - (idx * spaceHeight);
 
       TextSpan span = TextSpan(
-        style: TextStyle(
+        style: const TextStyle(
           color: Colors.black,
           fontSize: 11,
           fontWeight: FontWeight.bold,
@@ -60,7 +60,7 @@ class KeySignaturePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- 五線譜繪圖器 (Zoomed Out) ---
+// --- 五線譜繪圖器 (加入符桿與美化，保留穩定座標系) ---
 class StaffPainter extends CustomPainter {
   final int? noteIndex;
   final MusicalKey keySignature;
@@ -78,14 +78,16 @@ class StaffPainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.fill;
 
-    // [優化] 縮小行距，讓更多音符能顯示出來
-    final double spaceHeight = 10.0; // 原本 14.0
+    // 固定的五線譜間距，確保升降記號座標完美對齊
+    final double spaceHeight = 10.0;
 
+    // 1. 畫五條線
     for (int i = 0; i < 5; i++) {
       double y = centerY + (2 - i) * spaceHeight * 2;
       canvas.drawLine(Offset(20, y), Offset(size.width - 20, y), linePaint);
     }
 
+    // 2. 畫升降記號 (完美還原正確的座標矩陣)
     int accCount = keySignature.accidentals;
     bool isSharp = accCount > 0;
     int count = accCount.abs();
@@ -103,20 +105,62 @@ class StaffPainter extends CustomPainter {
       _drawAccidental(canvas, Offset(40.0 + i * 18, y), spaceHeight, symbol);
     }
 
+    // 3. 畫目標音符與符桿
     if (noteIndex != null) {
-      double baseLineY = centerY + 2 * spaceHeight * 2;
+      double baseLineY = centerY + 2 * spaceHeight * 2; // 最下面那條線 (E4)
       double noteY = baseLineY - (noteIndex! * spaceHeight);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(centerX, noteY), width: 18, height: 13),
-        notePaint,
-      ); // 稍微縮小音符
 
+      double noteWidth = spaceHeight * 2.4; // 音符寬度
+      double noteHeight = spaceHeight * 1.6; // 音符高度
+
+      // --- [NEW] 畫符桿 (Stem) ---
+      // staffIndex 4 是 B4 (五線譜正中間那條線)。大於等於它符桿朝下。
+      bool stemDown = noteIndex! >= 4;
+      double stemLength = spaceHeight * 6.5;
+      double stemXOffset = (noteWidth / 2) - 0.5; // 符桿要貼齊符頭邊緣
+
+      Paint stemPaint = Paint()
+        ..color = Colors.black
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round;
+
+      if (stemDown) {
+        // 符桿朝下 (畫在音符左邊)
+        canvas.drawLine(
+          Offset(centerX - stemXOffset, noteY),
+          Offset(centerX - stemXOffset, noteY + stemLength),
+          stemPaint,
+        );
+      } else {
+        // 符桿朝上 (畫在音符右邊)
+        canvas.drawLine(
+          Offset(centerX + stemXOffset, noteY),
+          Offset(centerX + stemXOffset, noteY - stemLength),
+          stemPaint,
+        );
+      }
+
+      // --- [NEW] 畫更真實的符頭 (Tilted Oval) ---
+      canvas.save();
+      canvas.translate(centerX, noteY);
+      canvas.rotate(-0.25); // 稍微傾斜，看起來更像手寫/印刷樂譜
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: noteWidth,
+          height: noteHeight,
+        ),
+        notePaint,
+      );
+      canvas.restore();
+
+      // --- 畫加線 (Ledger Lines) ---
       if (noteIndex! < -1) {
         for (int i = -2; i >= noteIndex!; i -= 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 16, lineY),
-            Offset(centerX + 16, lineY),
+            Offset(centerX - 18, lineY),
+            Offset(centerX + 18, lineY),
             linePaint,
           );
         }
@@ -125,8 +169,8 @@ class StaffPainter extends CustomPainter {
         for (int i = 10; i <= noteIndex!; i += 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 16, lineY),
-            Offset(centerX + 16, lineY),
+            Offset(centerX - 18, lineY),
+            Offset(centerX + 18, lineY),
             linePaint,
           );
         }
@@ -152,7 +196,7 @@ class StaffPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- 指板繪圖器 (Extended View) ---
+// --- 指板繪圖器 (維持穩定版邏輯，不動它) ---
 class ViolinFingerboardPainter extends CustomPainter {
   final ViolinNote? targetNote;
   final MusicalKey currentKey;
@@ -185,7 +229,6 @@ class ViolinFingerboardPainter extends CustomPainter {
       ..color = Colors.white
       ..strokeWidth = 3.0;
 
-    // 背景指板
     Path boardPath = Path();
     double topWidth = size.width * 0.65;
     double bottomWidth = size.width * 0.85;
@@ -208,11 +251,9 @@ class ViolinFingerboardPainter extends CustomPainter {
     double stringSpacing = topWidth / 4;
     double firstStringX = startX + (topWidth - stringSpacing * 3) / 2;
 
-    // [優化] 增加 visibleLengthMm 來縮小比例，讓更多把位能顯示
-    double visibleLengthMm = 200.0; // 原本 160.0
+    double visibleLengthMm = 200.0;
     double pixelPerMm = (size.height - nutY) / visibleLengthMm;
 
-    // 從 Logic 取得要掃描的半音範圍
     var range = ViolinLogic.getScanRange(currentPosition);
 
     for (int stringIdx = 0; stringIdx < 4; stringIdx++) {
