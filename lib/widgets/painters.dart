@@ -306,7 +306,7 @@ class StaffPainter extends CustomPainter {
     TextPainter tp = TextPainter(text: span, textDirection: TextDirection.ltr);
     tp.layout();
 
-    double yOffset = isSharp ? tp.height * 0.52 : tp.height * 0.68;
+    double yOffset = isSharp ? tp.height * 0.52 : tp.height * 0.63;
     tp.paint(canvas, Offset(centerPos.dx, centerPos.dy - yOffset));
   }
 
