@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../utils/violin_logic.dart';
 
-// --- 迷你調號繪圖器 (維持穩定版邏輯) ---
+// --- 迷你調號繪圖器 (維持穩定版) ---
 class KeySignaturePainter extends CustomPainter {
   final int accidentals;
   KeySignaturePainter({required this.accidentals});
@@ -25,7 +25,7 @@ class KeySignaturePainter extends CustomPainter {
 
     bool isSharp = accidentals > 0;
     int count = accidentals.abs();
-    String symbol = isSharp ? "#" : "b";
+    String symbol = isSharp ? "♯" : "♭";
 
     List<int> sharpIndices = [8, 5, 9, 6, 3, 7, 4];
     List<int> flatIndices = [4, 7, 3, 6, 2, 5, 1];
@@ -41,7 +41,7 @@ class KeySignaturePainter extends CustomPainter {
       TextSpan span = TextSpan(
         style: const TextStyle(
           color: Colors.black,
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: FontWeight.bold,
           height: 1.0,
         ),
@@ -60,7 +60,7 @@ class KeySignaturePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- 五線譜繪圖器 (加入符桿與美化，保留穩定座標系) ---
+// --- 五線譜繪圖器 (維持穩定版) ---
 class StaffPainter extends CustomPainter {
   final int? noteIndex;
   final MusicalKey keySignature;
@@ -78,16 +78,13 @@ class StaffPainter extends CustomPainter {
       ..color = Colors.black
       ..style = PaintingStyle.fill;
 
-    // 固定的五線譜間距，確保升降記號座標完美對齊
     final double spaceHeight = 10.0;
 
-    // 1. 畫五條線
     for (int i = 0; i < 5; i++) {
       double y = centerY + (2 - i) * spaceHeight * 2;
       canvas.drawLine(Offset(20, y), Offset(size.width - 20, y), linePaint);
     }
 
-    // 2. 畫升降記號 (完美還原正確的座標矩陣)
     int accCount = keySignature.accidentals;
     bool isSharp = accCount > 0;
     int count = accCount.abs();
@@ -96,7 +93,7 @@ class StaffPainter extends CustomPainter {
     List<int> flatIndices = [4, 7, 3, 6, 2, 5, 1];
 
     List<int> indicesToDraw = isSharp ? sharpIndices : flatIndices;
-    String symbol = isSharp ? "#" : "b";
+    String symbol = isSharp ? "♯" : "♭";
 
     for (int i = 0; i < count; i++) {
       if (i >= indicesToDraw.length) break;
@@ -105,34 +102,28 @@ class StaffPainter extends CustomPainter {
       _drawAccidental(canvas, Offset(40.0 + i * 18, y), spaceHeight, symbol);
     }
 
-    // 3. 畫目標音符與符桿
     if (noteIndex != null) {
-      double baseLineY = centerY + 2 * spaceHeight * 2; // 最下面那條線 (E4)
+      double baseLineY = centerY + 2 * spaceHeight * 2;
       double noteY = baseLineY - (noteIndex! * spaceHeight);
 
-      double noteWidth = spaceHeight * 2.4; // 音符寬度
-      double noteHeight = spaceHeight * 1.6; // 音符高度
+      double noteWidth = 18.0;
+      double noteHeight = 13.0;
 
-      // --- [NEW] 畫符桿 (Stem) ---
-      // staffIndex 4 是 B4 (五線譜正中間那條線)。大於等於它符桿朝下。
       bool stemDown = noteIndex! >= 4;
-      double stemLength = spaceHeight * 6.5;
-      double stemXOffset = (noteWidth / 2) - 0.5; // 符桿要貼齊符頭邊緣
+      double stemLength = spaceHeight * 3.5;
+      double stemXOffset = (noteWidth / 2) - 0.5;
 
       Paint stemPaint = Paint()
         ..color = Colors.black
-        ..strokeWidth = 1.5
-        ..strokeCap = StrokeCap.round;
+        ..strokeWidth = 1.5;
 
       if (stemDown) {
-        // 符桿朝下 (畫在音符左邊)
         canvas.drawLine(
           Offset(centerX - stemXOffset, noteY),
           Offset(centerX - stemXOffset, noteY + stemLength),
           stemPaint,
         );
       } else {
-        // 符桿朝上 (畫在音符右邊)
         canvas.drawLine(
           Offset(centerX + stemXOffset, noteY),
           Offset(centerX + stemXOffset, noteY - stemLength),
@@ -140,10 +131,9 @@ class StaffPainter extends CustomPainter {
         );
       }
 
-      // --- [NEW] 畫更真實的符頭 (Tilted Oval) ---
       canvas.save();
       canvas.translate(centerX, noteY);
-      canvas.rotate(-0.25); // 稍微傾斜，看起來更像手寫/印刷樂譜
+      canvas.rotate(-0.25);
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset.zero,
@@ -154,13 +144,12 @@ class StaffPainter extends CustomPainter {
       );
       canvas.restore();
 
-      // --- 畫加線 (Ledger Lines) ---
       if (noteIndex! < -1) {
         for (int i = -2; i >= noteIndex!; i -= 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 18, lineY),
-            Offset(centerX + 18, lineY),
+            Offset(centerX - 16, lineY),
+            Offset(centerX + 16, lineY),
             linePaint,
           );
         }
@@ -169,8 +158,8 @@ class StaffPainter extends CustomPainter {
         for (int i = 10; i <= noteIndex!; i += 2) {
           double lineY = baseLineY - (i * spaceHeight);
           canvas.drawLine(
-            Offset(centerX - 18, lineY),
-            Offset(centerX + 18, lineY),
+            Offset(centerX - 16, lineY),
+            Offset(centerX + 16, lineY),
             linePaint,
           );
         }
@@ -182,21 +171,21 @@ class StaffPainter extends CustomPainter {
     TextSpan span = TextSpan(
       style: TextStyle(
         color: Colors.black,
-        fontSize: scale * 2.2,
+        fontSize: scale * 2.5,
         fontWeight: FontWeight.bold,
       ),
       text: text,
     );
     TextPainter tp = TextPainter(text: span, textDirection: TextDirection.ltr);
     tp.layout();
-    tp.paint(canvas, Offset(pos.dx, pos.dy - tp.height / 2));
+    tp.paint(canvas, Offset(pos.dx, pos.dy - tp.height / 2.2));
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// --- 指板繪圖器 (維持穩定版邏輯，不動它) ---
+// --- 指板繪圖器 (拿掉空弦的灰色與白色外圈) ---
 class ViolinFingerboardPainter extends CustomPainter {
   final ViolinNote? targetNote;
   final MusicalKey currentKey;
@@ -280,10 +269,20 @@ class ViolinFingerboardPainter extends CustomPainter {
         isTargetString ? highlightStringPaint : stringPaint,
       );
 
+      // 如果目標是這條弦的空弦，畫紅色實心底圖
+      if (isTargetString && targetSemitones == 0) {
+        canvas.drawCircle(Offset(x, 8), 12, targetPaint);
+      }
+
+      // 繪製弦名
       TextPainter(
           text: TextSpan(
             text: stringNames[stringIdx],
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           textDirection: TextDirection.ltr,
         )
@@ -303,49 +302,28 @@ class ViolinFingerboardPainter extends CustomPainter {
 
         if (y > size.height - 5) continue;
 
-        if (result.isInKey) {
-          if (s == 0) {
-            canvas.drawCircle(
-              Offset(x, y),
-              7,
-              Paint()
-                ..color = Colors.grey.withOpacity(0.5)
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.5,
-            );
-          } else {
-            canvas.drawCircle(Offset(x, y), 7, hintPaint);
-          }
+        // 畫背景圖鑑 (略過空弦 s == 0)
+        if (result.isInKey && s != 0) {
+          canvas.drawCircle(Offset(x, y), 7, hintPaint);
         }
 
-        if (isTargetString && s == targetSemitones) {
+        // 畫目標高亮 (略過空弦 s == 0)
+        if (isTargetString && s == targetSemitones && s != 0) {
           int fingerNum = ViolinLogic.calcFingerNum(s, currentPosition);
-
-          if (s == 0) {
-            canvas.drawCircle(
-              Offset(x, y),
-              9,
-              Paint()
-                ..color = Colors.blueAccent
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 2.5,
-            );
-          } else {
-            canvas.drawCircle(Offset(x, y), 9, targetPaint);
-            TextPainter(
-                text: TextSpan(
-                  text: "$fingerNum",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+          canvas.drawCircle(Offset(x, y), 9, targetPaint);
+          TextPainter(
+              text: TextSpan(
+                text: "$fingerNum",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
                 ),
-                textDirection: TextDirection.ltr,
-              )
-              ..layout()
-              ..paint(canvas, Offset(x - 4, y - 8));
-          }
+              ),
+              textDirection: TextDirection.ltr,
+            )
+            ..layout()
+            ..paint(canvas, Offset(x - 4, y - 8));
         }
       }
     }
