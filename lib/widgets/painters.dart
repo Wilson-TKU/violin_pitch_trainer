@@ -22,7 +22,7 @@ class KeySignaturePainter extends CustomPainter {
 
   // 統一座標系
   double _getY(int idx, double centerY, double spaceHeight) {
-    return centerY - (idx - 5) * spaceHeight;
+    return centerY - (idx - 4) * spaceHeight;
   }
 
   @override
@@ -100,7 +100,7 @@ class StaffPainter extends CustomPainter {
 
   // 絕對統一座標系
   double _getY(int idx, double centerY, double spaceHeight) {
-    return centerY - (idx - 5) * spaceHeight;
+    return centerY - (idx - 4) * spaceHeight;
   }
 
   @override
@@ -264,7 +264,7 @@ class StaffPainter extends CustomPainter {
         }
       }
       if (noteIndex! > 9) {
-        for (int i = 11; i <= noteIndex!; i += 2) {
+        for (int i = 10; i <= noteIndex!; i += 2) {
           double lineY = _getY(i, centerY, spaceHeight);
           canvas.drawLine(
             Offset(noteX - 18, lineY),
