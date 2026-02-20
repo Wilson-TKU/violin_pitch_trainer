@@ -8,6 +8,7 @@ enum PracticeMode {
   // --- [NEW] 新增的兩個模式 ---
   staffToSolfege, // 極速視譜 (Flashcard)
   positionToSolfege, // 指位 -> 唱名 (Mapping)
+  scaleEarTraining, // [NEW] 音階聽音練習
 }
 
 // [NEW] 新增把位定義

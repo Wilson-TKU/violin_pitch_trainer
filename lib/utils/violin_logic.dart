@@ -139,4 +139,62 @@ class ViolinLogic {
 
     return (note: foundNote, isInKey: isInKey, semitones: semitones);
   }
+
+  // [NEW] Gets the 8 notes for a one-octave major scale for a given key.
+  static List<ViolinNote> getScaleNotes(MusicalKey key) {
+    // 1. Get the valid note base names for the key.
+    final validBaseNames = keyNotesMap[key];
+    if (validBaseNames == null || validBaseNames.isEmpty) return [];
+
+    // 2. Find the root note's base name (e.g., "C#" for C_Sharp_Major)
+    final rootBaseName = key.name.split('_')[0].replaceAll('Sharp', '#');
+
+    // 3. Find the lowest-octave root note available in allNotes.
+    ViolinNote? startNote;
+    for (final note in allNotes) {
+      if (note.baseName == rootBaseName) {
+        startNote = note;
+        break;
+      }
+    }
+    if (startNote == null) return []; // Should not happen
+
+    // 4. Iterate from the start note to find all 8 scale notes.
+    final scale = <ViolinNote>[];
+    int startIndex = allNotes.indexOf(startNote);
+
+    for (int i = startIndex; i < allNotes.length && scale.length < 8; i++) {
+      final currentNote = allNotes[i];
+      // Use the existing isNoteInKey logic to correctly handle enharmonics
+      if (isNoteInKey(currentNote, key)) {
+        // Avoid adding duplicate scale degrees (e.g. both G and G#)
+        if (scale.isEmpty ||
+            scale.last.solfege != currentNote.solfege) {
+          scale.add(currentNote);
+        }
+      }
+    }
+
+    if (scale.length == 8) {
+      return scale;
+    } else {
+      // If the scale runs out of notes at the top, try starting an octave lower if possible.
+      // This is a fallback and might not be needed with complete note data.
+      return [];
+    }
+  }
+
+  static List<ViolinNote> getScaleNotesForPosition({
+    required MusicalKey key,
+    required ViolinPosition position,
+  }) {
+    final range = getPositionIndexRange(position);
+    final List<ViolinNote> positionNotes = allNotes.sublist(range.minIndex, range.maxIndex + 1);
+
+    final List<ViolinNote> scaleNotes = positionNotes.where((note) {
+      return isNoteInKey(note, key);
+    }).toList();
+
+    return scaleNotes;
+  }
 }

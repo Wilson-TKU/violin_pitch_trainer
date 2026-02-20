@@ -15,6 +15,16 @@ void main() {
   runApp(const MaterialApp(home: ViolinApp()));
 }
 
+enum PracticeMode {
+  staffToFinger,
+  fingerToStaff,
+  earTraining,
+  staffToSolfege,
+  positionToSolfege,
+  scaleEarTraining,
+  scalePractice,
+}
+
 class ViolinApp extends StatefulWidget {
   const ViolinApp({super.key});
 
@@ -74,8 +84,19 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   bool _showClef = true;
   bool _showKeySignature = true;
 
+  // [NEW] Scale Ear Training options
+  bool _playDescendingScale = false;
+  bool _playArpeggio = false;
+
   // [NEW] 靜音開關
   bool _isMuted = false;
+
+  // [NEW] Scale Practice Mode variables
+  List<ViolinNote> _scalePracticeNotes = [];
+  int _currentScalePracticeIndex = 0;
+  bool _isScalePracticeAutoPlay = false;
+  Timer? _scalePracticeTimer;
+  double _scalePracticeInterval = 1.0; // in seconds
 
   // [NEW] 應用程式前台狀態追蹤 (關鍵修正)
   bool _isAppInForeground = true;
@@ -91,6 +112,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _flashcardTimer?.cancel();
+    _scalePracticeTimer?.cancel();
     _player.dispose();
     super.dispose();
   }
@@ -113,6 +135,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
         'questionsPerSessionDouble', _questionsPerSessionDouble);
     await prefs.setDouble('timeLimitSetting', _timeLimitSetting);
     await prefs.setBool('isMuted', _isMuted);
+    await prefs.setBool('playDescendingScale', _playDescendingScale);
+    await prefs.setBool('playArpeggio', _playArpeggio);
+    await prefs.setBool('isScalePracticeAutoPlay', _isScalePracticeAutoPlay);
+    await prefs.setDouble('scalePracticeInterval', _scalePracticeInterval);
   }
 
   void _loadSettings() async {
@@ -166,9 +192,15 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
           prefs.getDouble('questionsPerSessionDouble') ?? 10.0;
       _timeLimitSetting = prefs.getDouble('timeLimitSetting') ?? 1.5;
       _isMuted = prefs.getBool('isMuted') ?? false;
+      _playDescendingScale = prefs.getBool('playDescendingScale') ?? false;
+      _playArpeggio = prefs.getBool('playArpeggio') ?? false;
+      _isScalePracticeAutoPlay =
+          prefs.getBool('isScalePracticeAutoPlay') ?? false;
+      _scalePracticeInterval =
+          prefs.getDouble('scalePracticeInterval') ?? 1.0;
     });
 
-    _nextNote();
+    _onSettingsChanged();
   }
 
   // [MODIFIED] 強化生命週期管理
@@ -177,19 +209,14 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // 回到前台
       _isAppInForeground = true;
-
-      // 如果是在 Session 中，且倒數計時器被暫停了，這裡可以選擇是否自動恢復
-      // 目前策略：保持暫停，讓使用者看到當前畫面，避免一回來就突然嚇到
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // 進入背景
       _isAppInForeground = false;
-
-      // 強制停止所有活動
       _player.stop();
       _flashcardTimer?.cancel();
+      _scalePracticeTimer?.cancel();
       _reactionTimer.stop();
-
       setState(() {
         _isPlaying = false;
       });
@@ -312,8 +339,19 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     );
   }
 
+  void _onSettingsChanged() {
+    _scalePracticeTimer?.cancel();
+    _flashcardTimer?.cancel();
+
+    if (_practiceMode == PracticeMode.scalePractice) {
+      _startScalePractice();
+    } else {
+      _nextNote();
+    }
+    _saveSettings();
+  }
+
   Future<void> _nextNote() async {
-    // [FIX] 關鍵修正：如果 APP 在背景，直接終止執行，防止聲音或計時器啟動
     if (!_isAppInForeground) return;
 
     _flashcardTimer?.cancel();
@@ -378,24 +416,11 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     });
 
     if (!_isMuted) {
-      // 再次檢查 (避免 async gap 期間切到背景)
       if (!_isAppInForeground) {
         setState(() => _isPlaying = false);
         return;
       }
-
-      double adjustedFrequency = note.frequency * (_referencePitch / 440.0);
-      final Uint8List wavBytes = ToneGenerator.generateSineWave(
-        frequency: adjustedFrequency,
-        durationMs: 800,
-        sampleRate: 44100,
-      );
-
-      try {
-        await _player.play(BytesSource(wavBytes));
-      } catch (e) {
-        debugPrint("Audio Error: $e");
-      }
+      _playCurrentNoteSound();
     }
 
     if (_isGameMode()) {
@@ -410,11 +435,26 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _playCurrentNoteSound() async {
+    if (_currentNote == null || _isMuted) return;
+    double adjustedFrequency =
+        _currentNote!.frequency * (_referencePitch / 440.0);
+    final Uint8List wavBytes = ToneGenerator.generateSineWave(
+      frequency: adjustedFrequency,
+      durationMs: 800,
+      sampleRate: 44100,
+    );
+    try {
+      await _player.play(BytesSource(wavBytes));
+    } catch (e) {
+      debugPrint("Audio Error: $e");
+    }
+  }
+
   void _startTimer() {
     _flashcardTimer = Timer.periodic(const Duration(milliseconds: 100), (
       timer,
     ) {
-      // 安全檢查
       if (!_isAppInForeground) {
         timer.cancel();
         return;
@@ -481,6 +521,142 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     });
   }
 
+  // --- Scale Practice Mode Logic ---
+
+  void _startScalePractice() {
+    _scalePracticeTimer?.cancel();
+    if (_selectedKeys.isEmpty || _selectedPositions.isEmpty) {
+      setState(() {
+        _scalePracticeNotes = [];
+        _currentNote = null;
+      });
+      return;
+    }
+
+    _currentQuestionKey = _selectedKeys.first;
+    _targetPosition = _selectedPositions.first;
+
+    final notes = ViolinLogic.getScaleNotesForPosition(
+      key: _currentQuestionKey,
+      position: _targetPosition,
+    );
+
+    setState(() {
+      _scalePracticeNotes = notes;
+      _currentScalePracticeIndex = 0;
+      if (notes.isNotEmpty) {
+        _currentNote = notes[0];
+        _playCurrentNoteSound();
+      } else {
+        _currentNote = null;
+      }
+    });
+
+    if (_isScalePracticeAutoPlay) {
+      _toggleScalePracticeAutoPlay(true);
+    }
+  }
+
+  void _nextScalePracticeNote() {
+    if (_scalePracticeNotes.isEmpty) return;
+
+    setState(() {
+      _currentScalePracticeIndex =
+          (_currentScalePracticeIndex + 1) % _scalePracticeNotes.length;
+      _currentNote = _scalePracticeNotes[_currentScalePracticeIndex];
+      _playCurrentNoteSound();
+    });
+  }
+
+  void _toggleScalePracticeAutoPlay(bool play) {
+    _scalePracticeTimer?.cancel();
+    setState(() {
+      _isScalePracticeAutoPlay = play;
+    });
+    if (play) {
+      _scalePracticeTimer = Timer.periodic(
+        Duration(milliseconds: (_scalePracticeInterval * 1000).round()),
+        (timer) {
+          if (!_isAppInForeground) {
+            timer.cancel();
+            return;
+          }
+          _nextScalePracticeNote();
+        },
+      );
+    }
+    _saveSettings();
+  }
+
+  // --- End Scale Practice ---
+
+  bool _isPlayingScale = false;
+
+  void _stopScale() {
+    setState(() {
+      _isPlayingScale = false;
+      _player.stop();
+    });
+  }
+
+  Future<void> _playScale() async {
+    if (_isPlayingScale) return;
+
+    setState(() {
+      _isPlayingScale = true;
+      _currentNote = null;
+    });
+
+    final List<ViolinNote> scale =
+        ViolinLogic.getScaleNotes(_currentQuestionKey);
+    if (scale.isEmpty) {
+      setState(() => _isPlayingScale = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text("無法產生此調性的音階。"),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final List<ViolinNote> sequence = [...scale];
+    if (_playDescendingScale) {
+      sequence.addAll(scale.reversed.skip(1));
+    }
+    if (_playArpeggio) {
+      sequence.add(scale[0]);
+      sequence.add(scale[2]);
+      sequence.add(scale[4]);
+      sequence.add(scale[7]);
+    }
+
+    const noteDuration = Duration(milliseconds: 450);
+    for (final note in sequence) {
+      if (!_isPlayingScale) break;
+
+      setState(() {
+        _currentNote = note;
+      });
+
+      if (!_isMuted) {
+        double adjFreq = note.frequency * (_referencePitch / 440.0);
+        final wavBytes = ToneGenerator.generateSineWave(
+            frequency: adjFreq, durationMs: 400, sampleRate: 44100);
+        await _player.stop();
+        await _player.play(BytesSource(wavBytes));
+      }
+
+      await Future.delayed(noteDuration);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isPlayingScale = false;
+        _currentNote = null;
+      });
+    }
+  }
+
   String _getModeName(PracticeMode mode) {
     switch (mode) {
       case PracticeMode.staffToFinger:
@@ -493,6 +669,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
         return "極速視譜 (Flashcard)";
       case PracticeMode.positionToSolfege:
         return "指位 -> 唱名";
+      case PracticeMode.scaleEarTraining:
+        return "音階聽音練習";
+      case PracticeMode.scalePractice:
+        return "音階把位練習";
     }
   }
 
@@ -506,17 +686,15 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        // Use a list of bools to manage the expansion state of the panels.
         List<bool> _settingsPanelExpanded = [
-          false, // 1. Practice Mode
-          true, // 2. Keys (Expanded by default)
-          false, // 3. Positions
-          false, // 4. Note Range
-          false, // 5. Questions per Session
-          false, // 6. Reference Pitch
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
         ];
 
-        // Helper to build a summary string for the selected keys
         String getSelectedKeysSummary() {
           if (_selectedKeys.isEmpty) return "None";
           if (_selectedKeys.length > 2)
@@ -570,7 +748,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           });
                         },
                         children: [
-                          // 1. Practice Mode
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -581,32 +758,69 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             },
                             body: Padding(
                               padding: const EdgeInsets.all(15.0),
-                              child: Wrap(
-                                spacing: 8.0,
-                                runSpacing: 4.0,
-                                children: PracticeMode.values.map((mode) {
-                                  return ChoiceChip(
-                                    label: Text(_getModeName(mode)),
-                                    selected: _practiceMode == mode,
-                                    onSelected: (val) {
-                                      if (val) {
-                                        _resetSessionState();
-                                        setModalState(
-                                            () => _practiceMode = mode);
-                                        setState(() {
-                                          _practiceMode = mode;
-                                          _saveSettings();
-                                          _nextNote();
-                                        });
-                                      }
-                                    },
-                                  );
-                                }).toList(),
+                              child: Column(
+                                children: [
+                                  Wrap(
+                                    spacing: 8.0,
+                                    runSpacing: 4.0,
+                                    children: PracticeMode.values.map((mode) {
+                                      return ChoiceChip(
+                                        label: Text(_getModeName(mode)),
+                                        selected: _practiceMode == mode,
+                                        onSelected: (val) {
+                                          if (val) {
+                                            setModalState(
+                                                () => _practiceMode = mode);
+                                            setState(() {
+                                              _resetSessionState();
+                                              _practiceMode = mode;
+                                              if (mode !=
+                                                      PracticeMode
+                                                          .staffToSolfege &&
+                                                  mode !=
+                                                      PracticeMode
+                                                          .positionToSolfege) {
+                                                _isSessionActive = false;
+                                              }
+                                              _onSettingsChanged();
+                                            });
+                                          }
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                  if (_practiceMode ==
+                                      PracticeMode.scaleEarTraining)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 16.0),
+                                      child: Column(
+                                        children: [
+                                          SwitchListTile(
+                                            title: const Text("也播放下行音階"),
+                                            value: _playDescendingScale,
+                                            onChanged: (val) {
+                                              setModalState(() =>
+                                                  _playDescendingScale = val);
+                                              setState(() => _saveSettings());
+                                            },
+                                          ),
+                                          SwitchListTile(
+                                            title: const Text("也播放琶音"),
+                                            value: _playArpeggio,
+                                            onChanged: (val) {
+                                              setModalState(
+                                                  () => _playArpeggio = val);
+                                              setState(() => _saveSettings());
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             isExpanded: _settingsPanelExpanded[0],
                           ),
-                          // 2. Keys
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -624,18 +838,21 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(""), // Placeholder
+                                      Text(
+                                        _practiceMode == PracticeMode.scalePractice ? "單選" : "",
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
                                       Row(
                                         children: [
                                           const Text("多選: "),
                                           Switch(
                                             value: _isMultiSelectMode,
-                                            onChanged: (val) {
+                                            onChanged: _practiceMode == PracticeMode.scalePractice ? null : (val) {
                                               setModalState(() =>
                                                   _isMultiSelectMode = val);
                                               setState(() {
                                                 _isMultiSelectMode = val;
-                                                _saveSettings();
+                                                _onSettingsChanged();
                                               });
                                             },
                                           ),
@@ -663,10 +880,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                                   Set.from(MusicalKey.values);
                                             }
                                           });
-                                          setState(() {
-                                            _saveSettings();
-                                            _nextNote();
-                                          });
+                                          setState(() => _onSettingsChanged());
                                         },
                                         child: const Text("全選/重置"),
                                       ),
@@ -745,7 +959,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             ),
                             isExpanded: _settingsPanelExpanded[1],
                           ),
-                          // 3. Positions
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -764,17 +977,17 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(""),
+                                       Text(
+                                        _practiceMode == PracticeMode.scalePractice ? "單選" : "",
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
                                       Row(
                                         children: [
                                           const Text("多選: "),
                                           Switch(
                                             value: _isPositionMultiSelectMode,
-                                            onChanged: (val) {
-                                              setModalState(() =>
-                                                  _isPositionMultiSelectMode =
-                                                      val);
-                                              setState(() {
+                                            onChanged: _practiceMode == PracticeMode.scalePractice ? null : (val) {
+                                              setModalState(() {
                                                 _isPositionMultiSelectMode =
                                                     val;
                                                 if (!val &&
@@ -784,9 +997,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                                     _selectedPositions.first
                                                   };
                                                 }
+                                              });
+                                              setState(() {
                                                 _resetRangeToFitPosition();
-                                                _saveSettings();
-                                                _nextNote();
+                                                _onSettingsChanged();
                                               });
                                             },
                                           ),
@@ -808,18 +1022,17 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                         _isPositionMultiSelectMode,
                                     onSelectionChanged: (newValues) {
                                       setModalState(() {
-                                        if (_isPositionMultiSelectMode) {
+                                        if (_isPositionMultiSelectMode && _practiceMode != PracticeMode.scalePractice) {
                                           if (newValues.isEmpty) return;
                                           _selectedPositions = newValues;
                                         } else {
                                           if (newValues.isNotEmpty)
-                                            _selectedPositions = newValues;
+                                            _selectedPositions = {newValues.first};
                                         }
-                                        _resetRangeToFitPosition();
                                       });
                                       setState(() {
-                                        _saveSettings();
-                                        _nextNote();
+                                        _resetRangeToFitPosition();
+                                        _onSettingsChanged();
                                       });
                                     },
                                   ),
@@ -828,7 +1041,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             ),
                             isExpanded: _settingsPanelExpanded[2],
                           ),
-                          // 4. Note Range
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -855,15 +1067,12 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                     clampedStart = clampedEnd;
                                   setModalState(() => _rangePercent =
                                       RangeValues(clampedStart, clampedEnd));
-                                  setState(() {
-                                    _saveSettings();
-                                  });
+                                  setState(() => _saveSettings());
                                 },
                               ),
                             ),
                             isExpanded: _settingsPanelExpanded[3],
                           ),
-                          // 5. Questions Per Session
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -883,15 +1092,12 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                 onChanged: (val) {
                                   setModalState(
                                       () => _questionsPerSessionDouble = val);
-                                  setState(() {
-                                    _saveSettings();
-                                  });
+                                  setState(() => _saveSettings());
                                 },
                               ),
                             ),
                             isExpanded: _settingsPanelExpanded[4],
                           ),
-                          // 6. Reference Pitch
                           ExpansionPanel(
                             canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
@@ -913,9 +1119,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                 onSelectionChanged: (newVal) {
                                   setModalState(
                                       () => _referencePitch = newVal.first);
-                                  setState(() {
-                                    _saveSettings();
-                                  });
+                                  setState(() => _saveSettings());
                                 },
                               ),
                             ),
@@ -950,7 +1154,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     return GestureDetector(
       onTap: () {
         setModalState(() {
-          if (_isMultiSelectMode) {
+          if (_isMultiSelectMode && _practiceMode != PracticeMode.scalePractice) {
             if (isSelected) {
               if (_selectedKeys.length > 1) _selectedKeys.remove(key);
             } else {
@@ -960,10 +1164,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
             _selectedKeys = {key};
           }
         });
-        setState(() {
-          _saveSettings();
-          _nextNote();
-        });
+        setState(() => _onSettingsChanged());
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
@@ -1083,27 +1284,43 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     bool showFingerboardHint = false;
     bool showStaff = true;
+    bool showFingerboardDot = true;
 
     switch (_practiceMode) {
       case PracticeMode.staffToFinger:
         showStaff = true;
         showFingerboardHint = !_isAnswerVisible;
+        showFingerboardDot = _isAnswerVisible;
         break;
       case PracticeMode.fingerToStaff:
         showStaff = _isAnswerVisible;
         showFingerboardHint = false;
+        showFingerboardDot = true;
         break;
       case PracticeMode.earTraining:
         showStaff = _isAnswerVisible;
         showFingerboardHint = !_isAnswerVisible;
+        showFingerboardDot = _isAnswerVisible;
         break;
       case PracticeMode.staffToSolfege:
         showStaff = true;
         showFingerboardHint = true;
+        showFingerboardDot = _isAnswerVisible;
         break;
       case PracticeMode.positionToSolfege:
         showStaff = false;
         showFingerboardHint = false;
+        showFingerboardDot = true;
+        break;
+      case PracticeMode.scaleEarTraining:
+        showStaff = true;
+        showFingerboardHint = false;
+        showFingerboardDot = true;
+        break;
+      case PracticeMode.scalePractice:
+        showStaff = true;
+        showFingerboardHint = false;
+        showFingerboardDot = true;
         break;
     }
 
@@ -1137,7 +1354,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
       ),
       body: Row(
         children: [
-          // 左側: 指板
           Expanded(
             flex: 35,
             child: Container(
@@ -1149,12 +1365,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                   CustomPaint(
                     size: Size.infinite,
                     painter: ViolinFingerboardPainter(
-                      targetNote:
-                          (_practiceMode == PracticeMode.fingerToStaff ||
-                              _practiceMode == PracticeMode.positionToSolfege ||
-                              _isAnswerVisible)
-                          ? _currentNote
-                          : null,
+                      targetNote: showFingerboardDot ? _currentNote : null,
                       currentKey: _currentQuestionKey,
                       currentPosition: _targetPosition,
                     ),
@@ -1173,12 +1384,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
 
           const VerticalDivider(width: 1, thickness: 1),
 
-          // 右側: 譜與操作
           Expanded(
             flex: 65,
             child: Column(
               children: [
-                // 1. 頂部控制區
                 if (_isGameMode())
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1208,7 +1417,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                     ),
                   ),
 
-                // 2. 五線譜區域
                 Expanded(
                   flex: 4,
                   child: Container(
@@ -1229,7 +1437,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             ),
                           ),
 
-                        // Scrollable Staff
                         CustomPaint(
                           size: Size.infinite,
                           painter: StaffPainter(
@@ -1248,7 +1455,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             color: Colors.grey,
                           ),
 
-                        // Feedback message overlay
                         if (_feedbackMessage != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1269,7 +1475,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             ),
                           ),
 
-                        // [NEW] Overlay Toggle Buttons
                         Positioned(
                           top: 5,
                           right: 5,
@@ -1289,9 +1494,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                   ),
                                   tooltip: "顯示/隱藏譜號",
                                   onPressed: () {
-                                    setState(() {
-                                      _showClef = !_showClef;
-                                    });
+                                    setState(() => _showClef = !_showClef);
                                   },
                                 ),
                                 IconButton(
@@ -1303,9 +1506,8 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                   ),
                                   tooltip: "顯示/隱藏調號",
                                   onPressed: () {
-                                    setState(() {
-                                      _showKeySignature = !_showKeySignature;
-                                    });
+                                    setState(() =>
+                                        _showKeySignature = !_showKeySignature);
                                   },
                                 ),
                               ],
@@ -1319,7 +1521,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
 
                 const Divider(height: 1, thickness: 1),
 
-                // 3. 操作區域
                 Expanded(
                   flex: 6,
                   child: Container(
@@ -1329,20 +1530,114 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label}",
+                          "${_getModeName(_practiceMode)} - ${_currentQuestionKey.label} - ${_targetPosition.label}",
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
                             fontWeight: FontWeight.bold,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 10),
 
-                        // --- 核心分歧點 ---
-                        if (_isGameMode()) ...[
+                        if (_practiceMode == PracticeMode.scalePractice) ...[
+                          // --- [NEW] UI for Scale Practice ---
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _currentNote?.getDisplayName(_currentQuestionKey).replaceAll('\n', ' ') ?? 'N/A',
+                                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  _currentNote?.solfege ?? '',
+                                  style: const TextStyle(fontSize: 20, color: Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SwitchListTile(
+                            title: const Text("Auto"),
+                            value: _isScalePracticeAutoPlay,
+                            onChanged: _toggleScalePracticeAutoPlay,
+                          ),
+                          Row(
+                            children: [
+                              const Text("Speed:"),
+                              Expanded(
+                                child: Slider(
+                                  value: _scalePracticeInterval,
+                                  min: 0.2,
+                                  max: 3.0,
+                                  divisions: 14,
+                                  label: "${_scalePracticeInterval.toStringAsFixed(1)}s",
+                                  onChanged: (val) {
+                                    setState(() => _scalePracticeInterval = val);
+                                  },
+                                  onChangeEnd: (val){
+                                    _saveSettings();
+                                    if(_isScalePracticeAutoPlay){
+                                      _toggleScalePracticeAutoPlay(true);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                           SizedBox(
+                            width: double.infinity,
+                            height: 60,
+                            child: ElevatedButton(
+                              onPressed: _nextScalePracticeNote,
+                              child: const Text("Next"),
+                            ),
+                          )
+                        ] else if (_practiceMode == PracticeMode.scaleEarTraining) ...[
+                          const Spacer(),
+                          Text(
+                            _currentQuestionKey.label,
+                            style: const TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Text("Scale"),
+                          const Spacer(),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 60,
+                            child: ElevatedButton.icon(
+                              icon: Icon(_isPlayingScale
+                                  ? Icons.stop
+                                  : Icons.play_arrow),
+                              label: Text(
+                                _isPlayingScale ? "Stop" : "Play Scale",
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                if (_isPlayingScale) {
+                                  _stopScale();
+                                } else {
+                                  _playScale();
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isPlayingScale
+                                    ? Colors.red
+                                    : Colors.green,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ] else if (_isGameMode()) ...[
                           Expanded(child: _buildSolfegeKeypad()),
-
-                          // 固定高度區域
                           SizedBox(
                             height: 60,
                             width: double.infinity,
@@ -1366,7 +1661,6 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                 : const SizedBox(),
                           ),
                         ] else ...[
-                          // --- 舊模式 UI ---
                           if (_isAnswerVisible) ...[
                             Text(
                               _currentNote
@@ -1394,26 +1688,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                                 color: Colors.grey,
                               ),
                             ),
-
                           const Spacer(),
-
                           IconButton(
-                            onPressed: () async {
-                              if (_currentNote != null) {
-                                if (_isMuted) return;
-
-                                double adjFreq =
-                                    _currentNote!.frequency *
-                                    (_referencePitch / 440.0);
-                                final wavBytes = ToneGenerator.generateSineWave(
-                                  frequency: adjFreq,
-                                  durationMs: 1000,
-                                  sampleRate: 44100,
-                                );
-                                await _player.stop();
-                                await _player.play(BytesSource(wavBytes));
-                              }
-                            },
+                            onPressed: _playCurrentNoteSound,
                             icon: const Icon(Icons.volume_up, size: 40),
                             color: Colors.grey[700],
                           ),
