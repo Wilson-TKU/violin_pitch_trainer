@@ -114,8 +114,8 @@ class StaffPainter extends CustomPainter {
     // [排版間距設定]
     const double staffLeftPadding = 20.0; // 五線譜起始左邊距
     const double clefLeftPadding = 25.0; // 高音譜號左邊距
-    const double clefToKeySpacing = 15.0; // 高音譜號與調號之間的距離
-    const double keyToNoteSpacing = 40.0; // 調號結束與音符之間的最小安全距離
+    const double clefToKeySpacing = 1.0; // 高音譜號與調號之間的距離
+    const double keyToNoteSpacing = 70.0; // 調號結束與音符之間的最小安全距離
 
     // 1. 畫五條線
     for (int i = -2; i <= 2; i++) {
