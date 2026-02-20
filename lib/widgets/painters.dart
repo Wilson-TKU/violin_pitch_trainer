@@ -154,7 +154,7 @@ class StaffPainter extends CustomPainter {
       // 針對不同字型的通用對齊修正
       clefPainter.paint(
         canvas,
-        Offset(clefLeftPadding, gLineY - clefPainter.height * 0.62),
+        Offset(clefLeftPadding, gLineY - clefPainter.height * 0.60),
       );
     }
 
