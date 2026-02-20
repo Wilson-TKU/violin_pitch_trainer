@@ -99,13 +99,14 @@ class ViolinLogic {
       if (semitones <= 4) return 2;
       if (semitones <= 6) return 3;
       return 4;
-    } else {
-      int relative = semitones - 4;
-      if (relative <= 0) return 1;
-      if (relative <= 2) return 1;
-      if (relative <= 4) return 2;
-      if (relative <= 6) return 3;
-      return 4;
+    } else { // ViolinPosition.third
+      // Standard fingering for 3rd position.
+      // 1st finger is on the 5th semitone (e.g. C on G string).
+      // It can extend back to the 4th semitone.
+      if (semitones <= 5) return 1; // Semitones 4 (extension) and 5
+      if (semitones <= 7) return 2; // Semitones 6 and 7
+      if (semitones <= 9) return 3; // Semitones 8 and 9
+      return 4; // Semitones 10 and above
     }
   }
 
