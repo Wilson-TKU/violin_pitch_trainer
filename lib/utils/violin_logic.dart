@@ -29,7 +29,7 @@ class ViolinLogic {
       case ViolinPosition.first:
         return (minIndex: 0, maxIndex: 28);
       case ViolinPosition.third:
-        return (minIndex: 5, maxIndex: 37);
+        return (minIndex: 5, maxIndex: 33);
     }
   }
 
@@ -99,7 +99,8 @@ class ViolinLogic {
       if (semitones <= 4) return 2;
       if (semitones <= 6) return 3;
       return 4;
-    } else { // ViolinPosition.third
+    } else {
+      // ViolinPosition.third
       // Standard fingering for 3rd position.
       // 1st finger is on the 5th semitone (e.g. C on G string).
       // It can extend back to the 4th semitone.
@@ -168,8 +169,7 @@ class ViolinLogic {
       // Use the existing isNoteInKey logic to correctly handle enharmonics
       if (isNoteInKey(currentNote, key)) {
         // Avoid adding duplicate scale degrees (e.g. both G and G#)
-        if (scale.isEmpty ||
-            scale.last.solfege != currentNote.solfege) {
+        if (scale.isEmpty || scale.last.solfege != currentNote.solfege) {
           scale.add(currentNote);
         }
       }
@@ -189,7 +189,10 @@ class ViolinLogic {
     required ViolinPosition position,
   }) {
     final range = getPositionIndexRange(position);
-    final List<ViolinNote> positionNotes = allNotes.sublist(range.minIndex, range.maxIndex + 1);
+    final List<ViolinNote> positionNotes = allNotes.sublist(
+      range.minIndex,
+      range.maxIndex + 1,
+    );
 
     final List<ViolinNote> scaleNotes = positionNotes.where((note) {
       return isNoteInKey(note, key);
