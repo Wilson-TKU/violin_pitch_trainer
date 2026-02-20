@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/note.dart';
 import 'models/scale_data.dart';
@@ -38,10 +39,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
 
   // --- 設定變數 ---
   double _referencePitch = 442.0;
-  Set<MusicalKey> _selectedKeys = {MusicalKey.D_Major};
+  Set<MusicalKey> _selectedKeys = {MusicalKey.C_Major};
   bool _isMultiSelectMode = false;
 
-  MusicalKey _currentQuestionKey = MusicalKey.D_Major;
+  MusicalKey _currentQuestionKey = MusicalKey.C_Major;
 
   Set<ViolinPosition> _selectedPositions = {ViolinPosition.first};
   bool _isPositionMultiSelectMode = false;
@@ -79,8 +80,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _resetRangeToFitPosition();
-    _nextNote();
+    _loadSettings();
   }
 
   @override
@@ -89,6 +89,82 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
     _flashcardTimer?.cancel();
     _player.dispose();
     super.dispose();
+  }
+
+  // --- [NEW] Settings Persistence ---
+  void _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('practiceMode', _practiceMode.name);
+    await prefs.setDouble('referencePitch', _referencePitch);
+    await prefs.setStringList(
+        'selectedKeys', _selectedKeys.map((k) => k.name).toList());
+    await prefs.setBool('isMultiSelectMode', _isMultiSelectMode);
+    await prefs.setStringList(
+        'selectedPositions', _selectedPositions.map((p) => p.name).toList());
+    await prefs.setBool(
+        'isPositionMultiSelectMode', _isPositionMultiSelectMode);
+    await prefs.setDouble('rangePercentStart', _rangePercent.start);
+    await prefs.setDouble('rangePercentEnd', _rangePercent.end);
+    await prefs.setDouble(
+        'questionsPerSessionDouble', _questionsPerSessionDouble);
+    await prefs.setDouble('timeLimitSetting', _timeLimitSetting);
+    await prefs.setBool('isMuted', _isMuted);
+  }
+
+  void _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _practiceMode = PracticeMode.values.firstWhere(
+          (e) => e.name == prefs.getString('practiceMode'),
+          orElse: () => PracticeMode.staffToFinger);
+
+      _referencePitch = prefs.getDouble('referencePitch') ?? 442.0;
+
+      List<String> keyNames = prefs.getStringList('selectedKeys') ?? [];
+      if (keyNames.isNotEmpty) {
+        _selectedKeys = keyNames
+            .map((name) =>
+                MusicalKey.values.firstWhere((k) => k.name == name))
+            .toSet();
+      } else {
+        _selectedKeys = {MusicalKey.C_Major}; // Default
+      }
+      if (_selectedKeys.isEmpty) _selectedKeys = {MusicalKey.C_Major};
+      _currentQuestionKey = _selectedKeys.first;
+
+      _isMultiSelectMode = prefs.getBool('isMultiSelectMode') ?? false;
+
+      List<String> posNames =
+          prefs.getStringList('selectedPositions') ?? [];
+      if (posNames.isNotEmpty) {
+        _selectedPositions = posNames
+            .map((name) =>
+                ViolinPosition.values.firstWhere((p) => p.name == name))
+            .toSet();
+      } else {
+        _selectedPositions = {ViolinPosition.first}; // Default
+      }
+      if (_selectedPositions.isEmpty)
+        _selectedPositions = {ViolinPosition.first};
+
+      _isPositionMultiSelectMode =
+          prefs.getBool('isPositionMultiSelectMode') ?? false;
+
+      final rangeStart = prefs.getDouble('rangePercentStart');
+      final rangeEnd = prefs.getDouble('rangePercentEnd');
+      if (rangeStart != null && rangeEnd != null) {
+        _rangePercent = RangeValues(rangeStart, rangeEnd);
+      } else {
+        _resetRangeToFitPosition();
+      }
+
+      _questionsPerSessionDouble =
+          prefs.getDouble('questionsPerSessionDouble') ?? 10.0;
+      _timeLimitSetting = prefs.getDouble('timeLimitSetting') ?? 1.5;
+      _isMuted = prefs.getBool('isMuted') ?? false;
+    });
+
+    _nextNote();
   }
 
   // [MODIFIED] 強化生命週期管理
@@ -470,8 +546,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             setModalState(() => _practiceMode = mode);
                             setState(() {
                               _practiceMode = mode;
+                              _saveSettings();
+                              _nextNote();
                             });
-                            setState(() => _nextNote());
                           }
                         },
                       );
@@ -497,7 +574,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             value: _isMultiSelectMode,
                             onChanged: (val) {
                               setModalState(() => _isMultiSelectMode = val);
-                              setState(() => _isMultiSelectMode = val);
+                              setState(() {
+                                _isMultiSelectMode = val;
+                                _saveSettings();
+                              });
                             },
                           ),
                         ],
@@ -518,7 +598,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                               _selectedKeys = Set.from(MusicalKey.values);
                             }
                           });
-                          setState(() => _nextNote());
+                          setState(() {
+                            _saveSettings();
+                            _nextNote();
+                          });
                         },
                         child: const Text("全選/重置"),
                       ),
@@ -653,16 +736,17 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                               setModalState(
                                 () => _isPositionMultiSelectMode = val,
                               );
-                              setState(() => _isPositionMultiSelectMode = val);
-                              if (!val && _selectedPositions.length > 1) {
-                                setModalState(() {
+                              setState(() {
+                                _isPositionMultiSelectMode = val;
+                                if (!val && _selectedPositions.length > 1) {
                                   _selectedPositions = {
                                     _selectedPositions.first,
                                   };
                                   _resetRangeToFitPosition();
-                                });
-                                setState(() => _nextNote());
-                              }
+                                }
+                                _saveSettings();
+                                _nextNote();
+                              });
                             },
                           ),
                         ],
@@ -693,7 +777,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                         }
                         _resetRangeToFitPosition();
                       });
-                      setState(() => _nextNote());
+                      setState(() {
+                        _saveSettings();
+                        _nextNote();
+                      });
                     },
                   ),
                   const SizedBox(height: 10),
@@ -737,7 +824,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           clampedEnd,
                         ),
                       );
-                      setState(() {});
+                      setState(() {
+                        _saveSettings();
+                      });
                     },
                   ),
 
@@ -770,7 +859,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                     label: "$_questionsPerSession",
                     onChanged: (val) {
                       setModalState(() => _questionsPerSessionDouble = val);
-                      setState(() {});
+                      setState(() {
+                        _saveSettings();
+                      });
                     },
                   ),
 
@@ -788,7 +879,9 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                     selected: {_referencePitch},
                     onSelectionChanged: (newVal) {
                       setModalState(() => _referencePitch = newVal.first);
-                      setState(() {});
+                      setState(() {
+                        _saveSettings();
+                      });
                     },
                   ),
 
@@ -824,7 +917,10 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
             _selectedKeys = {key};
           }
         });
-        setState(() => _nextNote());
+        setState(() {
+          _saveSettings();
+          _nextNote();
+        });
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
@@ -981,6 +1077,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
               setState(() {
                 _isMuted = !_isMuted;
               });
+              _saveSettings();
             },
           ),
           if (!_isSessionActive && _isGameMode())
@@ -1060,6 +1157,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                             label: "${_timeLimitSetting}s",
                             onChanged: (val) {
                               setState(() => _timeLimitSetting = val);
+                              _saveSettings();
                             },
                           ),
                         ),
