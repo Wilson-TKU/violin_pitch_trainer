@@ -4,7 +4,8 @@ import '../models/note.dart';
 import '../utils/violin_logic.dart';
 
 // =====================================================================
-// [重要配置] 定義音樂符號字型優先順序
+// [重要配置] 音樂符號字型優先順序
+// 雖然 Chrome 可能會無視這些，但留著當作第一道防線。
 // =====================================================================
 const List<String> musicFontFallbacks = [
   'Bravura',
@@ -14,12 +15,12 @@ const List<String> musicFontFallbacks = [
   'Symbola',
 ];
 
-// --- 迷你調號繪圖器 (維持不變) ---
+// --- 迷你調號繪圖器 (加粗加大) ---
 class KeySignaturePainter extends CustomPainter {
   final int accidentals;
   KeySignaturePainter({required this.accidentals});
 
-  // 統一座標系：5 為中間線
+  // 統一座標系
   double _getY(int idx, double centerY, double spaceHeight) {
     return centerY - (idx - 5) * spaceHeight;
   }
@@ -58,9 +59,9 @@ class KeySignaturePainter extends CustomPainter {
       TextSpan span = TextSpan(
         style: const TextStyle(
           color: Colors.black,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'serif',
+          fontSize: 18, // [加大]
+          fontWeight: FontWeight.w900, // [強制超粗體]
+          fontFamilyFallback: musicFontFallbacks,
           height: 1.0,
         ),
         text: symbol,
@@ -71,8 +72,8 @@ class KeySignaturePainter extends CustomPainter {
       );
       tp.layout();
 
-      // 視覺置中微調
-      double yOffset = isSharp ? tp.height * 0.5 : tp.height * 0.65;
+      // 視覺重心校正
+      double yOffset = isSharp ? tp.height * 0.48 : tp.height * 0.62;
       tp.paint(canvas, Offset(startX + i * 7.0, y - yOffset));
     }
   }
@@ -81,7 +82,7 @@ class KeySignaturePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- 五線譜繪圖器 (間距與排版全面優化) ---
+// --- 五線譜繪圖器 (升降記號暴力美化) ---
 class StaffPainter extends CustomPainter {
   final int? noteIndex;
   final MusicalKey keySignature;
@@ -112,10 +113,10 @@ class StaffPainter extends CustomPainter {
     final double spaceHeight = 10.0;
 
     // [排版間距設定]
-    const double staffLeftPadding = 20.0; // 五線譜起始左邊距
-    const double clefLeftPadding = 25.0; // 高音譜號左邊距
-    const double clefToKeySpacing = 1.0; // 高音譜號與調號之間的距離
-    const double keyToNoteSpacing = 70.0; // 調號結束與音符之間的最小安全距離
+    const double staffLeftPadding = 20.0;
+    const double clefLeftPadding = 25.0;
+    const double clefToKeySpacing = 15.0;
+    const double keyToNoteSpacing = 40.0;
 
     // 1. 畫五條線
     for (int i = -2; i <= 2; i++) {
@@ -127,9 +128,7 @@ class StaffPainter extends CustomPainter {
       );
     }
 
-    // ============================================================
     // 2. 畫高音譜記號 (G-Clef)
-    // ============================================================
     const double clefFontSize = 88.0;
     TextPainter clefPainter = TextPainter(
       text: const TextSpan(
@@ -137,27 +136,22 @@ class StaffPainter extends CustomPainter {
         style: TextStyle(
           fontSize: clefFontSize,
           color: Colors.black,
-          fontFamily: 'serif',
+          fontFamilyFallback: musicFontFallbacks, // 套用音樂字型優先
         ),
       ),
       textDirection: TextDirection.ltr,
     );
     clefPainter.layout();
 
-    // 對齊 G 線
     double gLineY = _getY(3, centerY, spaceHeight);
-    // 使用新的左邊距
+    // 針對不同字型的通用對齊修正
     clefPainter.paint(
       canvas,
-      Offset(clefLeftPadding, gLineY - clefPainter.height * 0.65),
+      Offset(clefLeftPadding, gLineY - clefPainter.height * 0.62),
     );
 
-    // ============================================================
     // 3. 畫調號 (升降記號) 並計算總寬度
-    // ============================================================
-    // 計算調號起始位置：高音譜號左邊距 + 高音譜號寬度 + 間距
     double currentKeyX = clefLeftPadding + clefPainter.width + clefToKeySpacing;
-    // 用來記錄調號結束的最右邊位置
     double keySignatureEndX = currentKeyX;
 
     int accCount = keySignature.accidentals;
@@ -170,15 +164,14 @@ class StaffPainter extends CustomPainter {
 
       List<int> indicesToDraw = isSharp ? sharpIndices : flatIndices;
       String symbol = isSharp ? "\u266F" : "\u266D";
-      // 升降記號之間的水平間距
-      double accSpacing = 16.0;
+      // 因為符號變大，稍微增加水平間距
+      double accSpacing = 18.0;
 
       for (int i = 0; i < count; i++) {
         if (i >= indicesToDraw.length) break;
         int idx = indicesToDraw[i];
         double targetY = _getY(idx, centerY, spaceHeight);
 
-        // 在當前 X 位置繪製
         _drawAccidental(
           canvas,
           Offset(currentKeyX, targetY),
@@ -187,33 +180,21 @@ class StaffPainter extends CustomPainter {
           isSharp,
         );
 
-        // 更新 X 位置給下一個符號
         currentKeyX += accSpacing;
       }
-      // 記錄最後一個符號結束的大約位置 (稍微扣回一點因為最後一個迴圈多加了一次間距)
-      keySignatureEndX = currentKeyX - accSpacing + 10.0; // +10 是符號本身的大約寬度緩衝
+      keySignatureEndX = currentKeyX - accSpacing + 12.0;
     }
 
-    // ============================================================
     // 4. 畫目標音符 (動態計算位置)
-    // ============================================================
     if (noteIndex != null) {
-      // [核心邏輯] 計算音符的 X 座標
-      // 1. 計算音符的「最小安全 X 座標」：調號結束位置 + 安全間距
       double minNoteX = keySignatureEndX + keyToNoteSpacing;
-
-      // 2. 最終音符位置：取「畫布中心」與「最小安全座標」的最大值
-      //    這樣保證音符至少在中間，但如果調號太長，音符會自動往右移。
       double noteX = max(centerX, minNoteX);
-
       double noteY = _getY(noteIndex!, centerY, spaceHeight);
 
-      // --- 符頭 (Note Head) ---
       double noteWidth = spaceHeight * 2.4;
       double noteHeight = spaceHeight * 1.6;
 
       canvas.save();
-      // 使用動態計算的 noteX
       canvas.translate(noteX, noteY);
       canvas.rotate(-0.25);
       canvas.drawOval(
@@ -226,10 +207,9 @@ class StaffPainter extends CustomPainter {
       );
       canvas.restore();
 
-      // --- 空弦外圈 ---
       if (isTargetOpenString) {
         canvas.drawCircle(
-          Offset(noteX, noteY), // 使用 noteX
+          Offset(noteX, noteY),
           spaceHeight * 1.6,
           Paint()
             ..color = Colors.blueAccent
@@ -238,7 +218,6 @@ class StaffPainter extends CustomPainter {
         );
       }
 
-      // --- 符桿 (Stem) ---
       bool stemDown = noteIndex! >= 5;
       double stemLength = spaceHeight * 7.0;
       double stemXOffset = (noteWidth / 2) - 0.7;
@@ -249,20 +228,19 @@ class StaffPainter extends CustomPainter {
 
       if (stemDown) {
         canvas.drawLine(
-          Offset(noteX - stemXOffset, noteY + noteHeight * 0.1), // 使用 noteX
+          Offset(noteX - stemXOffset, noteY + noteHeight * 0.1),
           Offset(noteX - stemXOffset, noteY + stemLength),
           stemPaint,
         );
       } else {
         canvas.drawLine(
-          Offset(noteX + stemXOffset, noteY - noteHeight * 0.1), // 使用 noteX
+          Offset(noteX + stemXOffset, noteY - noteHeight * 0.1),
           Offset(noteX + stemXOffset, noteY - stemLength),
           stemPaint,
         );
       }
 
-      // --- 加線 (Ledger Lines) ---
-      // 加線也要以 noteX 為中心繪製
+      // 加線要以 noteX 為中心
       if (noteIndex! < 1) {
         for (int i = 0; i >= noteIndex!; i -= 2) {
           double lineY = _getY(i, centerY, spaceHeight);
@@ -286,7 +264,10 @@ class StaffPainter extends CustomPainter {
     }
   }
 
-  // 繪製升降記號 (維持不變)
+  // =====================================================================
+  // [終極解決方案] 繪製升降記號
+  // 採用「暴力美學」：強制超級放大並使用超粗體，對抗瀏覽器的爛字型渲染。
+  // =====================================================================
   void _drawAccidental(
     Canvas canvas,
     Offset centerPos,
@@ -297,17 +278,27 @@ class StaffPainter extends CustomPainter {
     TextSpan span = TextSpan(
       style: TextStyle(
         color: Colors.black,
-        fontSize: spaceHeight * 4.0,
-        fontFamily: 'serif',
-        fontWeight: FontWeight.w600,
+        // [暴力放大] 從 4.5 提升到 5.8，確保即使是系統字型也夠大
+        fontSize: spaceHeight * 5.0,
+        // [強制超粗體] 逼迫瀏覽器把細線條畫粗，看起來才像樂譜符號
+        fontWeight: FontWeight.w900,
+        height: 1.0,
+        fontFamilyFallback: musicFontFallbacks,
       ),
       text: text,
     );
     TextPainter tp = TextPainter(text: span, textDirection: TextDirection.ltr);
     tp.layout();
 
-    double yOffset = isSharp ? tp.height * 0.52 : tp.height * 0.63;
-    tp.paint(canvas, Offset(centerPos.dx, centerPos.dy - yOffset));
+    // [重新校準視覺重心]
+    // 因為字體變大變粗，重心偏移量需要重新調整，確保對齊線/間
+    double yOffset = isSharp ? tp.height * 0.46 : tp.height * 0.64;
+
+    // 繪製時扣掉寬度的一半，確保 X 軸也是完美置中
+    tp.paint(
+      canvas,
+      Offset(centerPos.dx - tp.width / 2, centerPos.dy - yOffset),
+    );
   }
 
   @override
