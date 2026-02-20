@@ -568,6 +568,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                         children: [
                           // 1. Practice Mode
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("1. 練習模式"),
@@ -603,6 +604,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                           // 2. Keys
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("2. 調性"),
@@ -741,6 +743,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                           // 3. Positions
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("3. 把位"),
@@ -823,6 +826,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                           // 4. Note Range
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("4. 音域"),
@@ -857,6 +861,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                           // 5. Questions Per Session
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("5. 每回合題數"),
@@ -884,6 +889,7 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
                           ),
                           // 6. Reference Pitch
                           ExpansionPanel(
+                            canTapOnHeader: true,
                             headerBuilder: (context, isExpanded) {
                               return ListTile(
                                 title: const Text("6. 基準音"),
