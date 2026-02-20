@@ -502,395 +502,428 @@ class _ViolinAppState extends State<ViolinApp> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       builder: (context) {
+        // Use a list of bools to manage the expansion state of the panels.
+        List<bool> _settingsPanelExpanded = [
+          false, // 1. Practice Mode
+          true, // 2. Keys (Expanded by default)
+          false, // 3. Positions
+          false, // 4. Note Range
+          false, // 5. Questions per Session
+          false, // 6. Reference Pitch
+        ];
+
+        // Helper to build a summary string for the selected keys
+        String getSelectedKeysSummary() {
+          if (_selectedKeys.isEmpty) return "None";
+          if (_selectedKeys.length > 2)
+            return "${_selectedKeys.first.label}, ... (${_selectedKeys.length})";
+          return _selectedKeys.map((k) => k.label).join(', ');
+        }
+
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            var validRange = _getValidRangeForPositions();
             int total = allNotes.length;
             int sIdx = (_rangePercent.start * (total - 1)).round();
             int eIdx = (_rangePercent.end * (total - 1)).round();
             ViolinNote sNote = allNotes[sIdx];
             ViolinNote eNote = allNotes[eIdx];
-            String startStr = sNote
-                .getDisplayName(_selectedKeys.first)
-                .replaceAll('\n', ' ');
-            String endStr = eNote
-                .getDisplayName(_selectedKeys.first)
-                .replaceAll('\n', ' ');
-            var validRange = _getValidRangeForPositions();
+            String startStr =
+                sNote.getDisplayName(_selectedKeys.first).replaceAll('\n', ' ');
+            String endStr =
+                eNote.getDisplayName(_selectedKeys.first).replaceAll('\n', ' ');
 
             return Container(
-              padding: const EdgeInsets.all(20),
-              height: 750,
+              padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
+              height: MediaQuery.of(context).size.height * 0.9,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "設定 (Settings)",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // 1. 練習模式
-                  const Text(
-                    "1. 練習模式:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Wrap(
-                    spacing: 8.0,
-                    children: PracticeMode.values.map((mode) {
-                      return ChoiceChip(
-                        label: Text(_getModeName(mode)),
-                        selected: _practiceMode == mode,
-                        onSelected: (val) {
-                          if (val) {
-                            _resetSessionState();
-                            setModalState(() => _practiceMode = mode);
-                            setState(() {
-                              _practiceMode = mode;
-                              _saveSettings();
-                              _nextNote();
-                            });
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 15),
-
-                  // 2. 調性
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "2. 調性 (Keys):",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "設定 (Settings)",
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          const Text("多選: "),
-                          Switch(
-                            value: _isMultiSelectMode,
-                            onChanged: (val) {
-                              setModalState(() => _isMultiSelectMode = val);
-                              setState(() {
-                                _isMultiSelectMode = val;
-                                _saveSettings();
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  if (_isMultiSelectMode)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {
-                          setModalState(() {
-                            _isMultiSelectMode = true;
-                            if (_selectedKeys.length ==
-                                MusicalKey.values.length) {
-                              _selectedKeys = {MusicalKey.C_Major};
-                            } else {
-                              _selectedKeys = Set.from(MusicalKey.values);
-                            }
-                          });
-                          setState(() {
-                            _saveSettings();
-                            _nextNote();
-                          });
-                        },
-                        child: const Text("全選/重置"),
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        )
+                      ],
                     ),
-
+                  ),
+                  const SizedBox(height: 10),
                   Expanded(
                     child: SingleChildScrollView(
-                      child: Column(
+                      child: ExpansionPanelList(
+                        expansionCallback: (int index, bool isExpanded) {
+                          setModalState(() {
+                            _settingsPanelExpanded[index] =
+                                !_settingsPanelExpanded[index];
+                          });
+                        },
                         children: [
-                          Center(
-                            child: SizedBox(
-                              width: 120,
-                              child: _buildKeyButton(
-                                MusicalKey.C_Major,
-                                setModalState,
+                          // 1. Practice Mode
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("1. 練習模式"),
+                                subtitle: Text(_getModeName(_practiceMode)),
+                              );
+                            },
+                            body: Padding(
+                              padding: const EdgeInsets.all(15.0),
+                              child: Wrap(
+                                spacing: 8.0,
+                                runSpacing: 4.0,
+                                children: PracticeMode.values.map((mode) {
+                                  return ChoiceChip(
+                                    label: Text(_getModeName(mode)),
+                                    selected: _practiceMode == mode,
+                                    onSelected: (val) {
+                                      if (val) {
+                                        _resetSessionState();
+                                        setModalState(
+                                            () => _practiceMode = mode);
+                                        setState(() {
+                                          _practiceMode = mode;
+                                          _saveSettings();
+                                          _nextNote();
+                                        });
+                                      }
+                                    },
+                                  );
+                                }).toList(),
                               ),
                             ),
+                            isExpanded: _settingsPanelExpanded[0],
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    const Text(
-                                      "b",
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontWeight: FontWeight.bold,
+                          // 2. Keys
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("2. 調性"),
+                                subtitle: Text(getSelectedKeysSummary()),
+                              );
+                            },
+                            body: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 15.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(""), // Placeholder
+                                      Row(
+                                        children: [
+                                          const Text("多選: "),
+                                          Switch(
+                                            value: _isMultiSelectMode,
+                                            onChanged: (val) {
+                                              setModalState(() =>
+                                                  _isMultiSelectMode = val);
+                                              setState(() {
+                                                _isMultiSelectMode = val;
+                                                _saveSettings();
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_isMultiSelectMode)
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 15.0, bottom: 10),
+                                      child: TextButton(
+                                        onPressed: () {
+                                          setModalState(() {
+                                            if (_selectedKeys.length ==
+                                                MusicalKey.values.length) {
+                                              _selectedKeys = {
+                                                MusicalKey.C_Major
+                                              };
+                                            } else {
+                                              _selectedKeys =
+                                                  Set.from(MusicalKey.values);
+                                            }
+                                          });
+                                          setState(() {
+                                            _saveSettings();
+                                            _nextNote();
+                                          });
+                                        },
+                                        child: const Text("全選/重置"),
                                       ),
                                     ),
-                                    _buildKeyButton(
-                                      MusicalKey.F_Major,
-                                      setModalState,
+                                  ),
+                                Center(
+                                  child: _buildKeyButton(
+                                      MusicalKey.C_Major, setModalState),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          const Text("b"),
+                                          _buildKeyButton(
+                                              MusicalKey.F_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Bb_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Eb_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Ab_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Db_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Gb_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.Cb_Major,
+                                              setModalState),
+                                        ],
+                                      ),
                                     ),
-                                    _buildKeyButton(
-                                      MusicalKey.Bb_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.Eb_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.Ab_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.Db_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.Gb_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.Cb_Major,
-                                      setModalState,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          const Text("#"),
+                                          _buildKeyButton(
+                                              MusicalKey.G_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.D_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.A_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.E_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.B_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.F_Sharp_Major,
+                                              setModalState),
+                                          _buildKeyButton(
+                                              MusicalKey.C_Sharp_Major,
+                                              setModalState),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  children: [
-                                    const Text(
-                                      "#",
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontWeight: FontWeight.bold,
+                                const SizedBox(height: 15),
+                              ],
+                            ),
+                            isExpanded: _settingsPanelExpanded[1],
+                          ),
+                          // 3. Positions
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("3. 把位"),
+                                subtitle: Text(_selectedPositions
+                                    .map((p) => p.label.split(' ')[0])
+                                    .join(', ')),
+                              );
+                            },
+                            body: Padding(
+                              padding: const EdgeInsets.all(15.0),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(""),
+                                      Row(
+                                        children: [
+                                          const Text("多選: "),
+                                          Switch(
+                                            value: _isPositionMultiSelectMode,
+                                            onChanged: (val) {
+                                              setModalState(() =>
+                                                  _isPositionMultiSelectMode =
+                                                      val);
+                                              setState(() {
+                                                _isPositionMultiSelectMode =
+                                                    val;
+                                                if (!val &&
+                                                    _selectedPositions.length >
+                                                        1) {
+                                                  _selectedPositions = {
+                                                    _selectedPositions.first
+                                                  };
+                                                }
+                                                _resetRangeToFitPosition();
+                                                _saveSettings();
+                                                _nextNote();
+                                              });
+                                            },
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.G_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.D_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.A_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.E_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.B_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.F_Sharp_Major,
-                                      setModalState,
-                                    ),
-                                    _buildKeyButton(
-                                      MusicalKey.C_Sharp_Major,
-                                      setModalState,
-                                    ),
-                                  ],
-                                ),
+                                    ],
+                                  ),
+                                  SegmentedButton<ViolinPosition>(
+                                    segments: const [
+                                      ButtonSegment(
+                                          value: ViolinPosition.first,
+                                          label: Text("First")),
+                                      ButtonSegment(
+                                          value: ViolinPosition.third,
+                                          label: Text("Third")),
+                                    ],
+                                    selected: _selectedPositions,
+                                    multiSelectionEnabled:
+                                        _isPositionMultiSelectMode,
+                                    onSelectionChanged: (newValues) {
+                                      setModalState(() {
+                                        if (_isPositionMultiSelectMode) {
+                                          if (newValues.isEmpty) return;
+                                          _selectedPositions = newValues;
+                                        } else {
+                                          if (newValues.isNotEmpty)
+                                            _selectedPositions = newValues;
+                                        }
+                                        _resetRangeToFitPosition();
+                                      });
+                                      setState(() {
+                                        _saveSettings();
+                                        _nextNote();
+                                      });
+                                    },
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
+                            isExpanded: _settingsPanelExpanded[2],
+                          ),
+                          // 4. Note Range
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("4. 音域"),
+                                subtitle: Text("$startStr ~ $endStr"),
+                              );
+                            },
+                            body: Padding(
+                              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+                              child: RangeSlider(
+                                values: _rangePercent,
+                                min: 0.0,
+                                max: 1.0,
+                                divisions: 40,
+                                onChanged: (RangeValues values) {
+                                  double clampedStart = values.start;
+                                  double clampedEnd = values.end;
+                                  if (clampedStart < validRange.min)
+                                    clampedStart = validRange.min;
+                                  if (clampedEnd > validRange.max)
+                                    clampedEnd = validRange.max;
+                                  if (clampedStart > clampedEnd)
+                                    clampedStart = clampedEnd;
+                                  setModalState(() => _rangePercent =
+                                      RangeValues(clampedStart, clampedEnd));
+                                  setState(() {
+                                    _saveSettings();
+                                  });
+                                },
+                              ),
+                            ),
+                            isExpanded: _settingsPanelExpanded[3],
+                          ),
+                          // 5. Questions Per Session
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("5. 每回合題數"),
+                                subtitle: Text("$_questionsPerSession 題"),
+                              );
+                            },
+                            body: Padding(
+                              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+                              child: Slider(
+                                value: _questionsPerSessionDouble,
+                                min: 10,
+                                max: 100,
+                                divisions: 9,
+                                label: "$_questionsPerSession",
+                                onChanged: (val) {
+                                  setModalState(
+                                      () => _questionsPerSessionDouble = val);
+                                  setState(() {
+                                    _saveSettings();
+                                  });
+                                },
+                              ),
+                            ),
+                            isExpanded: _settingsPanelExpanded[4],
+                          ),
+                          // 6. Reference Pitch
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) {
+                              return ListTile(
+                                title: const Text("6. 基準音"),
+                                subtitle: Text("${_referencePitch.toInt()} Hz"),
+                              );
+                            },
+                            body: Padding(
+                              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+                              child: SegmentedButton<double>(
+                                segments: const [
+                                  ButtonSegment(
+                                      value: 440.0, label: Text("440Hz")),
+                                  ButtonSegment(
+                                      value: 442.0, label: Text("442Hz")),
+                                ],
+                                selected: {_referencePitch},
+                                onSelectionChanged: (newVal) {
+                                  setModalState(
+                                      () => _referencePitch = newVal.first);
+                                  setState(() {
+                                    _saveSettings();
+                                  });
+                                },
+                              ),
+                            ),
+                            isExpanded: _settingsPanelExpanded[5],
                           ),
                         ],
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 10),
-
-                  // 3. 把位
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "3. 把位:",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("完成"),
                       ),
-                      Row(
-                        children: [
-                          const Text("多選: "),
-                          Switch(
-                            value: _isPositionMultiSelectMode,
-                            onChanged: (val) {
-                              setModalState(
-                                () => _isPositionMultiSelectMode = val,
-                              );
-                              setState(() {
-                                _isPositionMultiSelectMode = val;
-                                if (!val && _selectedPositions.length > 1) {
-                                  _selectedPositions = {
-                                    _selectedPositions.first,
-                                  };
-                                  _resetRangeToFitPosition();
-                                }
-                                _saveSettings();
-                                _nextNote();
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  SegmentedButton<ViolinPosition>(
-                    segments: const [
-                      ButtonSegment(
-                        value: ViolinPosition.first,
-                        label: Text("First"),
-                      ),
-                      ButtonSegment(
-                        value: ViolinPosition.third,
-                        label: Text("Third"),
-                      ),
-                    ],
-                    selected: _selectedPositions,
-                    multiSelectionEnabled: _isPositionMultiSelectMode,
-                    onSelectionChanged: (newValues) {
-                      setModalState(() {
-                        if (_isPositionMultiSelectMode) {
-                          if (newValues.isEmpty) return;
-                          _selectedPositions = newValues;
-                        } else {
-                          if (newValues.isNotEmpty)
-                            _selectedPositions = newValues;
-                        }
-                        _resetRangeToFitPosition();
-                      });
-                      setState(() {
-                        _saveSettings();
-                        _nextNote();
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-
-                  // 4. 音域範圍
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "4. 音域:",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        "$startStr ~ $endStr",
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  RangeSlider(
-                    values: _rangePercent,
-                    min: 0.0,
-                    max: 1.0,
-                    divisions: 40,
-                    onChanged: (RangeValues values) {
-                      double clampedStart = values.start;
-                      double clampedEnd = values.end;
-                      if (clampedStart < validRange.min)
-                        clampedStart = validRange.min;
-                      if (clampedEnd > validRange.max)
-                        clampedEnd = validRange.max;
-                      if (clampedStart > clampedEnd) clampedStart = clampedEnd;
-                      setModalState(
-                        () => _rangePercent = RangeValues(
-                          clampedStart,
-                          clampedEnd,
-                        ),
-                      );
-                      setState(() {
-                        _saveSettings();
-                      });
-                    },
-                  ),
-
-                  // 5. 每回合題數
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "5. 每回合題數:",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        "$_questionsPerSession 題",
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: _questionsPerSessionDouble,
-                    min: 10,
-                    max: 100,
-                    divisions: 9,
-                    label: "$_questionsPerSession",
-                    onChanged: (val) {
-                      setModalState(() => _questionsPerSessionDouble = val);
-                      setState(() {
-                        _saveSettings();
-                      });
-                    },
-                  ),
-
-                  // 6. 基準音
-                  const SizedBox(height: 5),
-                  const Text(
-                    "6. 基準音:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SegmentedButton<double>(
-                    segments: const [
-                      ButtonSegment(value: 440.0, label: Text("440Hz")),
-                      ButtonSegment(value: 442.0, label: Text("442Hz")),
-                    ],
-                    selected: {_referencePitch},
-                    onSelectionChanged: (newVal) {
-                      setModalState(() => _referencePitch = newVal.first);
-                      setState(() {
-                        _saveSettings();
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text("完成"),
                     ),
                   ),
                 ],
